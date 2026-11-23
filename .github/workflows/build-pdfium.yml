@@ -127,12 +127,12 @@ jobs:
         shell: pwsh
         run: |
           # The `pdfium` target is a static component by default, which yields
-          # only pdfium.lib. Apply bblanchon's shared_library.patch so the same
-          # target builds pdfium.dll and exports FPDF_* via __declspec. The
-          # patched BUILD.gn references resources.rc, so create a minimal one.
+          # only pdfium.lib. Apply a trimmed bblanchon shared_library.patch so
+          # the same target builds pdfium.dll and exports FPDF_* via
+          # __declspec. The resources.rc hunk is dropped on purpose: the gn
+          # toolchain env does not carry the SDK bin dir, so rc.exe cannot be
+          # found, and version resources are not needed for the DLL.
           Set-Location "$env:RUNNER_TEMP\pdfium-src\pdfium"
-          Set-Content -Path resources.rc `
-            -Value '// Minimal resource file for the shared library build.' -Encoding ascii
           patch --force -p1 --fuzz=3 `
             -i "$env:GITHUB_WORKSPACE\.github\patches\pdfium\shared_library.patch"
 

@@ -11,16 +11,6 @@ index 62210c2f6..053fbff6d 100644
    output_name = "pdfium"
    libs = []
    configs += [ ":pdfium_strict_config" ]
-@@ -381,6 +381,9 @@ component("pdfium") {
-       "gdi32.lib",
-       "user32.lib",
-     ]
-+    sources = [
-+      "resources.rc"
-+    ]
-   }
- 
-   if (is_mac) {
 diff --git a/public/fpdfview.h b/public/fpdfview.h
 index e996d4a3b..b8c4b3dc2 100644
 --- a/public/fpdfview.h
