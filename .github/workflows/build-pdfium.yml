@@ -56,10 +56,12 @@ jobs:
         shell: pwsh
         run: |
           $depot = "$env:RUNNER_TEMP\depot_tools"
-          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $depot
+          # Full clone so update_depot_tools can initialize the tree and write
+          # python3_bin_reldir.txt (required by the gn wrapper); DEPOT_TOOLS_UPDATE
+          # is not set so the first gclient run performs that bootstrap.
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git $depot
           "PATH=$depot;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append
           "DEPOT_TOOLS_WIN_TOOLS=1" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "DEPOT_TOOLS_UPDATE=0" | Out-File -FilePath $env:GITHUB_ENV -Append
           # Do not fetch the GCS chrome-wintoolchain runtime: the bucket denies
           # anonymous access on hosted runners. Use the VS 2022 installed on the
           # windows-2022 image instead (see build/vs_toolchain.py).
