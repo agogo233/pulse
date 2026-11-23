@@ -60,6 +60,10 @@ jobs:
           # default gclient run updates it and writes python3_bin_reldir.txt.
           git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git $depot
           "PATH=$depot;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append
+          # Use the image's VS 2022 with the SDK we install below instead of the
+          # GCS chrome-wintoolchain bucket (anonymous list is denied -> 401).
+          # This also makes the vs_toolchain.py sync hook skip that download.
+          "DEPOT_TOOLS_WIN_TOOLCHAIN=0" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Install Windows SDK
         shell: pwsh
