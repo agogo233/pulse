@@ -116,6 +116,19 @@ jobs:
           gn gen out/x64
           Pop-Location
 
+      - name: Patch for shared library (pdfium.dll)
+        shell: pwsh
+        run: |
+          # The `pdfium` target is a static component by default, which yields
+          # only pdfium.lib. Apply bblanchon's shared_library.patch so the same
+          # target builds pdfium.dll and exports FPDF_* via __declspec. The
+          # patched BUILD.gn references resources.rc, so create a minimal one.
+          Set-Location "$env:RUNNER_TEMP\pdfium-src\pdfium"
+          Set-Content -Path resources.rc `
+            -Value '// Minimal resource file for the shared library build.' -Encoding ascii
+          patch --force -p1 --fuzz=3 `
+            -i "$env:GITHUB_WORKSPACE\.github\patches\pdfium\shared_library.patch"
+
       - name: Build
         shell: pwsh
         run: |
