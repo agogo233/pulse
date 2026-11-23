@@ -1638,8 +1638,10 @@ LRESULT CALLBACK WndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             s->savedSearches.Load();
             SyncSavedSearchSidebar(*s);
             s->places.Load();
-            if (!s->isolatedTest || s->isolatedTestPersist)
+            if (!s->isolatedTest || s->isolatedTestPersist) {
                 app::AliasStore::Instance().Load(app::GetPulseDataDir() + L"\\aliases.json");
+                app::ColorRuleStore::Instance().Load(app::GetPulseDataDir() + L"\\color_rules.json");
+            }
             app::AliasStore::PinyinHook() = [](std::wstring_view name, std::wstring_view query) {
                 return index::PinyinEligible(query) && static_cast<bool>(index::FindPinyinMatch(name, query));
             };

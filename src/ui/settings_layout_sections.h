@@ -245,6 +245,15 @@ float LayoutSettingsGeneral(SettingsLayout& l, const WindowViewModel& vm, float 
 
         section(I::SettingsSecSyncStatus);
         for(auto& sync : l.sync_row) sync=row(64);
+
+        section(I::SettingsSecColorRules);
+        l.color_rules_row=row(64);
+        l.color_rules_button_row=row(64);
+        {
+            const float bw=button_w(I::ColorRulesEdit,120);
+            const auto& r=l.color_rules_button_row;
+            l.color_rules_button=D2D1::RectF(r.right-16*scale-bw,r.top+16*scale,r.right-16*scale,r.top+48*scale);
+        }
     } else if (page == 10) {
         section(I::SettingsSecTabs);
         const float tile_width=156*scale;

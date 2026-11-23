@@ -4,6 +4,7 @@
 #include "ai_panel_icons.h"
 #include "bloom_accent_picker.h"
 #include "../common/localization.h"
+#include "../app/color_rule.h"
 #include <algorithm>
 #include "../common/text_format.h"
 #include <cmath>
@@ -864,6 +865,14 @@ void MainRenderer::DrawSettingsCore(const WindowViewModel& vm, const D2D1_RECT_F
             }
             toggle(lay.sync_row[0],I::SyncOneDrive,I::SyncOneDriveDesc,L"\xE753",vm.settings_sync_onedrive,75);
             toggle(lay.sync_row[1],I::SyncSvn,I::SyncSvnDesc,L"\xE8AB",vm.settings_sync_svn,76);
+        }
+        toggle(lay.color_rules_row,I::ColorRulesTitle,I::ColorRulesDesc,L"\xE8EC",
+               app::ColorRuleStore::Instance().MasterEnabled(),82);
+        {
+            const auto& r=lay.color_rules_button_row;
+            const auto& b=lay.color_rules_button;
+            label(r,l10n::Get(I::ColorRulesEdit),L"",L"\xE8EC",b.left-16*scale_);
+            button(b,l10n::Get(I::ColorRulesEdit),H::SettingsColorRules,0);
         }
         }
         if(page==12) {

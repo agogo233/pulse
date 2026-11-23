@@ -26,6 +26,7 @@ constexpr FileSpec kFiles[] = {
     {L"tag_rules.json", kTags, false},
     {L"aliases.json", kAliases, false},
     {L"saved_searches.json", kSavedSearches, false},
+    {L"color_rules.json", kColorRules, false},
 };
 constexpr std::wstring_view kAppFile = L"app.json";
 constexpr std::wstring_view kPlacesFile = L"places.json";
@@ -227,7 +228,7 @@ void PruneBackups(const std::wstring& data_dir) {
 
 Category CategoryAt(int index) noexcept {
     static constexpr Category kOrder[kCategoryCount] = {kPrefs, kPlaces, kTags, kAliases,
-                                                        kSavedSearches};
+                                                        kSavedSearches, kColorRules};
     return kOrder[std::clamp(index, 0, kCategoryCount - 1)];
 }
 
@@ -238,6 +239,7 @@ const wchar_t* CategoryKey(Category category) noexcept {
     case kTags: return L"tags";
     case kAliases: return L"aliases";
     case kSavedSearches: return L"saved_searches";
+    case kColorRules: return L"color_rules";
     }
     return L"";
 }

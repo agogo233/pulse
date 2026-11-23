@@ -10,6 +10,7 @@
 #include "../index/network_agent_client.h"
 #include "../fs/wsl_path.h"
 #include "../common/preview_packs.h"
+#include "color_rule.h"
 #include "../common/runtime_log.h"
 #include "system_ctx_model.h"
 #include "shortcut_settings.h"
@@ -1326,6 +1327,12 @@ void SettingsController::IntegrationAction(int index) {
 void SettingsController::ToggleUi(int index) {
     if (!prefs_ || !context_) return;
     if (index == 81) { ArrangeMinimized(prefs_->arrange_include_minimized ? 0 : 1); return; }
+    // 按规则上色: kept in color_rules.json, not app prefs; the store saves itself.
+    if (index == 82) {
+        ColorRuleStore& store = ColorRuleStore::Instance();
+        store.SetMasterEnabled(!store.MasterEnabled());
+        return;
+    }
     // 修改时间提示 switches and sync status, kept out of the chain below.
     // 77, 78: 鼠标与选择 hover selection and item check boxes; 79: 滚动时固定上级.
     if (index >= 70 && index <= 79) {

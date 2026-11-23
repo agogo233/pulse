@@ -136,6 +136,7 @@ enum MenuCmd : int {
     CmdManageAliases = 3916,    // 查看 menu: 管理别名… (list, remove, export, import)
     CmdExportAliases = 3917,
     CmdImportAliases = 3918,
+    CmdEditColorRules = 3919,   // palette: 编辑颜色规则… (按规则上色)
     CmdAliasBase = 3920,        // omnibar: +0..15 aliased folders matching the query
     CmdAliasOpenBase = 3940,    // 管理别名: +0..29 open the item
     CmdAliasRemoveBase = 3970,  // 管理别名: +0..29 remove the alias (row's trailing ×)

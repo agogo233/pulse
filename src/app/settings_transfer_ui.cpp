@@ -39,7 +39,7 @@ st::ApplyResult g_startup;  // what this start applied, for its toast
 
 constexpr StringId kCategoryText[st::kCategoryCount] = {
     StringId::TransferCatPrefs, StringId::TransferCatPlaces, StringId::TransferCatTags,
-    StringId::TransferCatAliases, StringId::TransferCatSearches,
+    StringId::TransferCatAliases, StringId::TransferCatSearches, StringId::TransferCatColorRules,
 };
 
 std::wstring Replace(std::wstring text, std::wstring_view key, const std::wstring& value) {

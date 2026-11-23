@@ -27,9 +27,10 @@ enum Category : uint32_t {
     kTags = 1u << 2,           // tags.json, tag_rules.json and places.json's tag members
     kAliases = 1u << 3,        // aliases.json
     kSavedSearches = 1u << 4,  // saved_searches.json
+    kColorRules = 1u << 5,     // color_rules.json
 };
-inline constexpr uint32_t kAllCategories = 0x1F;
-inline constexpr int kCategoryCount = 5;
+inline constexpr uint32_t kAllCategories = 0x3F;
+inline constexpr int kCategoryCount = 6;
 // Display order: settings, places, tags, aliases, saved searches.
 Category CategoryAt(int index) noexcept;
 // The bundle's name for a category ("prefs", "places", ...).

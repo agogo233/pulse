@@ -17,6 +17,7 @@
 #include "quick_access.h"
 #include "workspace_sidebar.h"
 #include "tag_manager.h"
+#include "color_rule_ui.h"
 #include "tag_view.h"
 #include "filter_tag_complete.h"
 #include "sidebar_tag_drag.h"
@@ -3500,7 +3501,8 @@ LRESULT HandleLButtonDown(AppState* s, HWND hwnd, UINT msg, WPARAM wParam, LPARA
                    hit.region == ui::HitTestResult::SettingsBlankClick ||
                    hit.region == ui::HitTestResult::SettingsHomeFolder ||
                    hit.region == ui::HitTestResult::SettingsLanCache ||
-                   hit.region == ui::HitTestResult::SettingsThumbCache) {
+                   hit.region == ui::HitTestResult::SettingsThumbCache ||
+                   hit.region == ui::HitTestResult::SettingsColorRules) {
             // One branch on purpose: this else-if chain sits at MSVC's block
             // nesting limit (C1061), so new settings must not lengthen it.
             switch (hit.region) {
@@ -3510,6 +3512,12 @@ LRESULT HandleLButtonDown(AppState* s, HWND hwnd, UINT msg, WPARAM wParam, LPARA
             case ui::HitTestResult::SettingsHomeFolder: s->settings.HomeFolder(hit.index); break;
             case ui::HitTestResult::SettingsLanCache: SetLanCacheMode(*s, hit.index); break;
             case ui::HitTestResult::SettingsThumbCache: s->settings.ClearThumbCache(); break;
+            case ui::HitTestResult::SettingsColorRules: {
+                POINT pt{mx, my};
+                ClientToScreen(hwnd, &pt);
+                ShowColorRules(*s, pt);
+                break;
+            }
             case ui::HitTestResult::SettingsMtimeStyle: s->settings.MtimeStyle(hit.index); break;
             case ui::HitTestResult::SettingsMtimeRange: s->settings.MtimeRange(hit.index); break;
             case ui::HitTestResult::SettingsMtimePalette: s->settings.MtimePalette(hit.index); break;

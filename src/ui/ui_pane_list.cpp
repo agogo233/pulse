@@ -17,6 +17,7 @@
 #include "../app/resource.h"
 #include "../app/places.h"
 #include "../app/search_query.h"
+#include "../app/color_rule.h"
 #include "../common/text_format.h"
 #include "../common/preview_extensions.h"
 #include "../common/file_placeholder.h"
@@ -6317,6 +6318,19 @@ void MainRenderer::DrawList(const PaneViewModel& vm, float x, float y, float w, 
                 }
                 if (gitMark != GitMark::None && !IsHighContrast())
                     nameColor = GitMarkColor(gitMark, theme.bg.r < 0.5f);
+                // 按规则上色: a matching rule overrides the tag tint and the Git
+                // mark above; the cut/hidden fade below still applies to it.
+                // Virtual rows (drives, change history, phone and network
+                // discovery rows) are never coloured.
+                if (!IsHighContrast() && vm.snapshot &&
+                    static_cast<size_t>(src) < vm.snapshot->size()) {
+                    const fs::DirEntry& de = (*vm.snapshot)[static_cast<size_t>(src)];
+                    if (de.drive_type == 0 && !de.change_record_only && !de.pc_launcher &&
+                        !de.pc_device && !de.net_group) {
+                        if (const auto rule = app::ColorRuleStore::Instance().Resolve(de))
+                            nameColor = HexColor(*rule);
+                    }
+                }
                 if (cut) nameColor = WithAlpha(nameColor, 0.55f);
                 else if (!IsHighContrast()) nameColor = HiddenEntryNameColor(e.attrs, theme, nameColor);
                 if (rename_covers && nameRc.left < rename_card.right && nameRc.right > rename_card.left &&

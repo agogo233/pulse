@@ -1680,6 +1680,7 @@ struct HitTestResult {
         SettingsHomeFolder,
         SettingsLanCache,  // 发现结果保留: 0 10 min, 1 1 h, 2 this session
         SettingsThumbCache,
+        SettingsColorRules,
         SettingsTextRender,
         SettingsUiFontSize,
         SettingsTrayIcon,

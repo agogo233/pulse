@@ -2846,6 +2846,7 @@ TransferCatPlaces	IDS_TRANSFER_CAT_PLACES	4046	快速访问、收藏夹和工作
 TransferCatTags	IDS_TRANSFER_CAT_TAGS	4047	标签与标签规则	Tags and tag rules	標籤與標籤規則
 TransferCatAliases	IDS_TRANSFER_CAT_ALIASES	4048	文件夹别名	Folder aliases	資料夾別名
 TransferCatSearches	IDS_TRANSFER_CAT_SEARCHES	4049	保存的搜索	Saved searches	儲存的搜尋
+TransferCatColorRules	IDS_TRANSFER_CAT_COLOR_RULES	6480	颜色规则	Color rules	
 ExportSettingsTitle	IDS_EXPORT_SETTINGS_TITLE	4050	导出设置	Export settings	匯出設定
 ExportSettingsPrompt	IDS_EXPORT_SETTINGS_PROMPT	4051	选择要导出的内容。这台电脑专属的设置（开机启动、系统集成等）不会导出。	Choose what to export. Settings that belong to this PC (startup, Windows integration) stay out.	選擇要匯出的內容。這台電腦專屬的設定（開機啟動、系統整合等）不會匯出。
 ExportSettingsConfirm	IDS_EXPORT_SETTINGS_CONFIRM	4052	导出…	Export…	匯出…
@@ -5165,3 +5166,44 @@ StoreCommunityEmpty	IDS_STORE_COMMUNITY_EMPTY	6435	还没有社区扩展	No comm
 SetupEndRetry	IDS_SETUP_END_RETRY	6436	结束进程并重试	End processes and retry	結束處理程序並重試
 SetupEndConfirm	IDS_SETUP_END_CONFIRM	6437	将结束列表中可核验的占用进程，未保存的内容可能丢失。请先保存工作。是否继续？	End the verified processes in this list? Unsaved work may be lost. Save your work before continuing.	將結束清單中可核驗的占用處理程序，未儲存的內容可能遺失。請先儲存工作。是否繼續？
 SetupEndFailed	IDS_SETUP_END_FAILED	6438	部分进程未能结束，请查看安装日志或手动退出后重试。	Some processes could not be ended. Check the setup log or quit them manually and retry.	部分處理程序未能結束，請查看安裝記錄或手動結束後重試。
+SettingsSecColorRules	IDS_SETTINGS_SEC_COLOR_RULES	6439	颜色规则	Color rules	
+ColorRulesTitle	IDS_COLOR_RULES_TITLE	6440	按规则上色	Colour by rules	
+ColorRulesDesc	IDS_COLOR_RULES_DESC	6441	命中规则的文件名显示为规则颜色，首条命中的规则优先。	Names matching a rule are shown in its colour; the first matching rule wins.	
+ColorRulesEdit	IDS_COLOR_RULES_EDIT	6442	编辑颜色规则…	Edit colour rules…	
+ColorRulePanelTitle	IDS_COLOR_RULE_PANEL_TITLE	6443	颜色规则	Colour rules	
+ColorRulePanelHint	IDS_COLOR_RULE_PANEL_HINT	6444	勾选启用规则，上移或下移调整优先级；Esc 取消，完成保存。	Check a rule to enable it; move rows to change priority. Esc discards, Done saves.	
+ColorRuleAdd	IDS_COLOR_RULE_ADD	6445	添加规则	Add rule	
+ColorRuleRemove	IDS_COLOR_RULE_REMOVE	6446	删除	Remove	
+ColorRuleUp	IDS_COLOR_RULE_UP	6447	上移	Move up	
+ColorRuleDown	IDS_COLOR_RULE_DOWN	6448	下移	Move down	
+ColorRuleDone	IDS_COLOR_RULE_DONE	6449	完成	Done	
+ColorRuleEmpty	IDS_COLOR_RULE_EMPTY	6450	暂无规则，添加一条开始。	No rules yet. Add one to begin.	
+ColorRuleMax	IDS_COLOR_RULE_MAX	6451	最多 100 条规则。	At most 100 rules.	
+ColorRuleFieldName	IDS_COLOR_RULE_FIELD_NAME	6452	名称	Name	
+ColorRuleFieldExts	IDS_COLOR_RULE_FIELD_EXTS	6453	扩展名	Extensions	
+ColorRuleFieldSize	IDS_COLOR_RULE_FIELD_SIZE	6454	大小	Size	
+ColorRuleFieldDate	IDS_COLOR_RULE_FIELD_DATE	6455	修改时间	Modified	
+ColorRuleFieldAttrs	IDS_COLOR_RULE_FIELD_ATTRS	6456	属性	Attributes	
+ColorRuleFieldScope	IDS_COLOR_RULE_FIELD_SCOPE	6457	作用域	Scope	
+ColorRuleFieldColor	IDS_COLOR_RULE_FIELD_COLOR	6458	颜色	Colour	
+ColorRuleScopeFiles	IDS_COLOR_RULE_SCOPE_FILES	6459	文件	Files	
+ColorRuleScopeFolders	IDS_COLOR_RULE_SCOPE_FOLDERS	6460	文件夹	Folders	
+ColorRuleScopeBoth	IDS_COLOR_RULE_SCOPE_BOTH	6461	文件和文件夹	Files and folders	
+ColorRuleDateAny	IDS_COLOR_RULE_DATE_ANY	6462	不限	Any	
+ColorRuleDate7	IDS_COLOR_RULE_DATE_7	6463	近 7 天	Last 7 days	
+ColorRuleDate30	IDS_COLOR_RULE_DATE_30	6464	近 30 天	Last 30 days	
+ColorRuleDate90	IDS_COLOR_RULE_DATE_90	6465	近 90 天	Last 90 days	
+ColorRuleSizeAny	IDS_COLOR_RULE_SIZE_ANY	6466	不限	Any	
+ColorRuleSizeEmpty	IDS_COLOR_RULE_SIZE_EMPTY	6467	空文件	Empty	
+ColorRuleSizeLt1M	IDS_COLOR_RULE_SIZE_LT_1M	6468	小于 1 MB	Smaller than 1 MB	
+ColorRuleSizeM1To10	IDS_COLOR_RULE_SIZE_1_TO_10	6469	1 – 10 MB	1 – 10 MB	
+ColorRuleSizeGt10M	IDS_COLOR_RULE_SIZE_GT_10M	6470	大于 10 MB	Larger than 10 MB	
+ColorRuleSizeGt100M	IDS_COLOR_RULE_SIZE_GT_100M	6471	大于 100 MB	Larger than 100 MB	
+ColorRuleSizeGt1G	IDS_COLOR_RULE_SIZE_GT_1G	6472	大于 1 GB	Larger than 1 GB	
+ColorRuleAttrReadonly	IDS_COLOR_RULE_ATTR_READONLY	6473	只读	Read-only	
+ColorRuleAttrHidden	IDS_COLOR_RULE_ATTR_HIDDEN	6474	隐藏	Hidden	
+ColorRuleAttrSystem	IDS_COLOR_RULE_ATTR_SYSTEM	6475	系统	System	
+ColorRuleAttrArchive	IDS_COLOR_RULE_ATTR_ARCHIVE	6476	归档	Archive	
+ColorRuleAttrCompressed	IDS_COLOR_RULE_ATTR_COMPRESSED	6477	压缩	Compressed	
+ColorRuleAttrEncrypted	IDS_COLOR_RULE_ATTR_ENCRYPTED	6478	加密	Encrypted	
+ColorRulesEditCommand	IDS_COLOR_RULES_EDIT_COMMAND	6479	编辑颜色规则	Edit colour rules	

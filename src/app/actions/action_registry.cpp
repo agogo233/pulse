@@ -784,6 +784,8 @@ constexpr Def kDefs[] = {
      kNoRun, FillFolder},
     {"alias.manage", I::ManageAliasesEllipsis, I::ActDomTags, L"\xE8EC", P::None, kNoKey,
      CmdManageAliases, kNoRun, kAlways},
+    {"alias.color_rules", I::ColorRulesEditCommand, I::ActDomApp, L"\xE8EC", P::None, kNoKey,
+     CmdEditColorRules, kNoRun, kAlways},
     // 暂存区
     {"tray.add", I::ActStageToTray, I::ActDomTray, L"\xE7B8", P::None, L"Ctrl+Shift+S", CmdStageToTray,
      kNoRun, FillSelection},

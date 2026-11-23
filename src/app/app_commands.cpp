@@ -14,6 +14,7 @@
 #include "tag_ads_sync.h"
 #include "tag_query.h"
 #include "folder_alias.h"
+#include "color_rule_ui.h"
 #include "zip_compress_ui.h"
 #include "keymap.h"
 #include "../ui/ui_motion.h"
@@ -1871,6 +1872,19 @@ void DispatchMenuCommand(AppState& s, int cmd) {
     case app::CmdSelectWildcard:
         ShowWildcardSelect(s);
         break;
+    case app::CmdEditColorRules: {
+        // Open under the pointer; the palette leaves it where the user was.
+        POINT pt{};
+        GetCursorPos(&pt);
+        if (pt.x <= 0 && pt.y <= 0) {
+            HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi{ sizeof(mi) };
+            GetMonitorInfoW(monitor, &mi);
+            pt = { (mi.rcWork.left + mi.rcWork.right) / 2, (mi.rcWork.top + mi.rcWork.bottom) / 2 };
+        }
+        ShowColorRules(s, pt);
+        break;
+    }
     case app::CmdProperties: {
         // Shell properties on the ops open thread. A multi-selection opens one
         // merged sheet (like Explorer) instead of the focused item's sheet.

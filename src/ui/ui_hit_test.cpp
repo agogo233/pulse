@@ -376,6 +376,8 @@ HitTestResult MainRenderer::HitTest(const WindowViewModel& vm, const D2D1_RECT_F
                 if(i<5 && (i!=2 || vm.settings_change_tracking) && ContainsPt(lay.mtime_toggle_row[i],x,y)) {r.region=HitTestResult::SettingsToggle;r.index=70+i;return r;}
                 if(i<2 && ContainsPt(lay.sync_row[i],x,y)) {r.region=HitTestResult::SettingsToggle;r.index=75+i;return r;}
             }
+            if(ContainsPt(lay.color_rules_row,x,y)) {r.region=HitTestResult::SettingsToggle;r.index=82;return r;}
+            if(ContainsPt(lay.color_rules_button,x,y)) {r.region=HitTestResult::SettingsColorRules;r.index=0;return r;}
             const D2D1_RECT_F actions[]={lay.content_pause,lay.content_options,lay.content_rebuild};
             for(int i=0;i<3;++i) if(ContainsPt(actions[i],x,y)) {r.region=HitTestResult::SettingsContentAction;r.index=i+1;return r;}
 

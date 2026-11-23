@@ -2829,6 +2829,9 @@ struct SettingsLayout {
     D2D1_RECT_F tree_sticky_row{};
     D2D1_RECT_F thumb_cache_row{};     // 缩略图缓存: usage bar and 清除缓存
     D2D1_RECT_F thumb_cache_button{};
+    D2D1_RECT_F color_rules_row{};     // 按规则上色: master switch
+    D2D1_RECT_F color_rules_button_row{};
+    D2D1_RECT_F color_rules_button{}; // 编辑颜色规则…
     D2D1_RECT_F vertical_tabs_row{};
     D2D1_RECT_F tray_hide_row{};
     D2D1_RECT_F lan_discovery_row{}, network_recent_row{}, hidden_shares_row{};
