@@ -60,6 +60,10 @@ jobs:
           "PATH=$depot;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append
           "DEPOT_TOOLS_WIN_TOOLS=1" | Out-File -FilePath $env:GITHUB_ENV -Append
           "DEPOT_TOOLS_UPDATE=0" | Out-File -FilePath $env:GITHUB_ENV -Append
+          # Do not fetch the GCS chrome-wintoolchain runtime: the bucket denies
+          # anonymous access on hosted runners. Use the VS 2022 installed on the
+          # windows-2022 image instead (see build/vs_toolchain.py).
+          "DEPOT_TOOLS_WIN_TOOLCHAIN=0" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Checkout PDFium (chromium/8044)
         shell: pwsh
@@ -72,7 +76,9 @@ jobs:
           Add-Content .gclient "target_os = [ 'win' ]"
           # chromium/8044 is the version-matched source line used by the
           # bblanchon/pdfium-binaries build; tip f91ca5a7... is verified in CI.
-          gclient sync -r 'origin/chromium/8044' --no-history --shallow
+          # --no-hooks skips the vs_toolchain.py download hook (GCS 401); the
+          # toolchain is resolved from the local VS via DEPOT_TOOLS_WIN_TOOLCHAIN=0.
+          gclient sync -r 'origin/chromium/8044' --no-history --shallow --no-hooks
 
       - name: Configure (args.gn)
         shell: pwsh
