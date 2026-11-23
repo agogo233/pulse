@@ -1,0 +1,202 @@
+name: Build PDFium from source
+
+# Builds the Windows x64 PDFium runtime from source (branch chromium/8044,
+# matching third_party/pdfium/VERSION) and, on a pdfium-* tag or with the
+# publish input, publishes a `pdfium-<version>` GitHub release that the
+# portable.yml workflow consumes. Release is never marked latest so it cannot
+# shadow the client's `releases/latest/download/update-manifest.json`.
+on:
+  workflow_dispatch:
+    inputs:
+      pdfium_version:
+        description: 'PDFium version, must match third_party/pdfium/VERSION (default 155.0.8044.0)'
+        required: false
+        default: '155.0.8044.0'
+      publish:
+        description: 'Publish a pdfium-<version> GitHub release'
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'pdfium-[0-9]*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build PDFium (win x64, chromium/8044)
+    runs-on: windows-2022
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: write # Upload workflow artifacts.
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Resolve PDFium version
+        id: version
+        shell: pwsh
+        run: |
+          $v = '${{ github.event.inputs.pdfium_version }}'
+          if (-not $v) {
+            if ('${{ github.ref_type }}' -eq 'tag') {
+              $tag = '${{ github.ref_name }}'
+              if ($tag -match '^pdfium-(.+)$') { $v = $Matches[1] }
+            }
+          }
+          if (-not $v) { throw 'Could not resolve the PDFium version' }
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Install depot_tools
+        shell: pwsh
+        run: |
+          $depot = "$env:RUNNER_TEMP\depot_tools"
+          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $depot
+          "PATH=$depot;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "DEPOT_TOOLS_WIN_TOOLS=1" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "DEPOT_TOOLS_UPDATE=0" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Checkout PDFium (chromium/8044)
+        shell: pwsh
+        run: |
+          $work = "$env:RUNNER_TEMP\pdfium-src"
+          New-Item -ItemType Directory -Force $work | Out-Null
+          Set-Location $work
+          gclient config --unmanaged https://pdfium.googlesource.com/pdfium.git `
+            --custom-var checkout_configuration=minimal
+          Add-Content .gclient "target_os = [ 'win' ]"
+          # chromium/8044 is the version-matched source line used by the
+          # bblanchon/pdfium-binaries build; tip f91ca5a7... is verified in CI.
+          gclient sync -r 'origin/chromium/8044' --no-history --shallow
+
+      - name: Configure (args.gn)
+        shell: pwsh
+        run: |
+          Set-Location "$env:RUNNER_TEMP\pdfium-src"
+          $gn = @(
+            'is_component_build = false'
+            'is_debug = false'
+            'pdf_enable_v8 = false'
+            'pdf_enable_xfa = false'
+            'pdf_is_standalone = true'
+            'pdf_use_partition_alloc = false'
+            'target_cpu = "x64"'
+            'target_os = "win"'
+            'treat_warnings_as_errors = false'
+          )
+          New-Item -ItemType Directory -Force pdfium\out\x64 | Out-Null
+          $gn | Sort-Object | Set-Content pdfium\out\x64\args.gn
+          Push-Location pdfium
+          gn gen out/x64
+          Pop-Location
+
+      - name: Build
+        shell: pwsh
+        run: |
+          Set-Location "$env:RUNNER_TEMP\pdfium-src\pdfium"
+          ninja -C out/x64 pdfium
+
+      - name: Verify ABI exports
+        shell: pwsh
+        run: |
+          $dll = "$env:RUNNER_TEMP\pdfium-src\pdfium\out\x64\pdfium.dll"
+          if (-not (Test-Path $dll)) { throw 'pdfium.dll was not produced' }
+          $native = [System.Runtime.InteropServices.NativeLibrary]::Load((Resolve-Path $dll))
+          try {
+            $required = @('FPDF_InitLibrary', 'FPDF_LoadDocument', 'FPDF_CloseDocument',
+              'FPDF_GetLastError', 'FPDF_RenderPageBitmap', 'FPDFText_LoadPage')
+            foreach ($symbol in $required) {
+              $handle = [IntPtr]::Zero
+              if (-not [System.Runtime.InteropServices.NativeLibrary]::TryGetExport($native, $symbol, [ref]$handle)) {
+                throw "pdfium.dll is missing required export: $symbol"
+              }
+            }
+          } finally {
+            [System.Runtime.InteropServices.NativeLibrary]::Free($native)
+          }
+
+      - name: Stage package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $v = '${{ steps.version.outputs.version }}'
+          $repo = $env:GITHUB_WORKSPACE
+          $src = "$env:RUNNER_TEMP\pdfium-src\pdfium"
+          $stage = "$env:RUNNER_TEMP\stage"
+          New-Item -ItemType Directory -Force $stage\bin, $stage\include\cpp, $stage\licenses | Out-Null
+          Copy-Item "$src\out\x64\pdfium.dll" "$stage\bin\pdfium.dll"
+          Copy-Item "$src\public\*.h" "$stage\include\"
+          Copy-Item "$src\public\cpp\*.h" "$stage\include\cpp\"
+          # Source-built PDFium is BSD-3-Clause; keep every third-party notice.
+          Copy-Item "$repo\third_party\pdfium\licenses\*" "$stage\licenses\"
+          Copy-Item "$repo\third_party\pdfium\licenses\pdfium.txt" "$stage\LICENSE"
+          Copy-Item "$repo\third_party\pdfium\args.gn" "$stage\args.gn"
+          $parts = $v.Split('.')
+          if ($parts.Count -ne 4) { throw "Unexpected PDFium version format: $v" }
+          "MAJOR=$($parts[0])`nMINOR=$($parts[1])`nBUILD=$($parts[2])`nPATCH=$($parts[3])" |
+            Set-Content "$stage\VERSION"
+          @"
+          # Source-built PDFium runtime (win x64)
+
+          - Source: https://pdfium.googlesource.com/pdfium (branch chromium/8044)
+          - Tip: f91ca5a72358bb0b00b4da9481b21fe668157614 (verified against the branch head)
+          - Built from source in CI (`.github/workflows/build-pdfium.yml`) with V8 and XFA disabled;
+            see `args.gn`.
+          - License: root `LICENSE` is PDFium's BSD-3-Clause (`licenses/pdfium.txt`); every
+            third-party notice is under `licenses/`.
+          - Only `Pulse.Document.exe` loads `pdfium.dll`, by absolute application-directory path.
+          - Update the source branch, tip, VERSION, build configuration, notices and checksum together.
+          "@ | Set-Content "$stage\README.pulse.md"
+          $zip = "$env:RUNNER_TEMP\pdfium-$v.zip"
+          Compress-Archive -Path "$stage\*" -DestinationPath $zip -CompressionLevel Optimal
+          New-Item -ItemType Directory -Force "$repo\dist" | Out-Null
+          Copy-Item $zip "$repo\dist\pdfium-$v.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pdfium-${{ steps.version.outputs.version }}
+          path: dist/pdfium-${{ steps.version.outputs.version }}.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: github.event_name == 'push' || github.event.inputs.publish == 'true'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pdfium-${{ needs.build.outputs.version }}
+          path: dist
+      - name: Publish pdfium-<version> release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="pdfium-$VERSION"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft >/dev/null 2>&1; then
+            draft=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft)
+            if [ "$draft" = "true" ]; then
+              echo "Draft $tag exists; completing the release."
+              gh release upload "$tag" --repo "$GITHUB_REPOSITORY" "dist/pdfium-$VERSION.zip" --clobber
+              gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false
+            else
+              echo "Release $tag already published; skipping."
+            fi
+            exit 0
+          fi
+          notes="PDFium $VERSION (win x64) built from source, branch chromium/8044."
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --title "PDFium $VERSION" \
+            --notes "$notes" --latest=false --draft "dist/pdfium-$VERSION.zip"
+          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" "dist/pdfium-$VERSION.zip" --clobber
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false
+          echo "Published $tag"
