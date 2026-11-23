@@ -76,9 +76,9 @@ jobs:
           Add-Content .gclient "target_os = [ 'win' ]"
           # chromium/8044 is the version-matched source line used by the
           # bblanchon/pdfium-binaries build; tip f91ca5a7... is verified in CI.
-          # --no-hooks skips the vs_toolchain.py download hook (GCS 401); the
+          # --nohooks skips the vs_toolchain.py download hook (GCS 401); the
           # toolchain is resolved from the local VS via DEPOT_TOOLS_WIN_TOOLCHAIN=0.
-          gclient sync -r 'origin/chromium/8044' --no-history --shallow --no-hooks
+          gclient sync -r 'origin/chromium/8044' --no-history --shallow --nohooks
 
       - name: Configure (args.gn)
         shell: pwsh
