@@ -71,7 +71,9 @@ jobs:
           # chromium/8044 requires the Windows 10 SDK 10.0.28000.0, which is not
           # preinstalled on the windows-2022 image. Install its desktop C++ x64
           # feature silently from the Microsoft download (as bblanchon does).
-          $inc = "C:\Program Files (x86)\Windows Kits\10\include\10.0.28000.0\um"
+          $ver = '10.0.28000.0'
+          $inc = "C:\Program Files (x86)\Windows Kits\10\include\$ver\um"
+          $bin = "C:\Program Files (x86)\Windows Kits\10\bin\$ver\x64"
           if (-not (Test-Path "$inc\Windows.h")) {
             $installer = "$env:RUNNER_TEMP\winsdksetup.exe"
             Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/?linkid=2370315' -OutFile $installer
@@ -79,6 +81,10 @@ jobs:
               '/features', 'OptionId.DesktopCPPx64', '/ceip', 'off', '/quiet', '/norestart'
             if (-not (Test-Path "$inc\Windows.h")) { throw 'Windows SDK 10.0.28000.0 install failed' }
           }
+          # Put the SDK tools (rc.exe and friends) on PATH for the ninja build,
+          # matching bblanchon's 01-install.sh.
+          if (-not (Test-Path "$bin\rc.exe")) { throw "rc.exe not found in $bin" }
+          Add-Content -Path $env:GITHUB_PATH -Value $bin
 
       - name: Checkout PDFium (chromium/8044)
         shell: pwsh
