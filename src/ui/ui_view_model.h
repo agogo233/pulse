@@ -1294,7 +1294,7 @@ struct WindowViewModel {
     bool settings_pack_ffmpeg_enabled = true;
     bool settings_pack_use_custom = false;
     bool settings_pack_remove_on_uninstall = true;
-    bool settings_pack_auto_update = true;      // 自动更新预览增强包
+    bool settings_pack_auto_update = false;     // 自动更新预览增强包
     uint32_t settings_pack_installed = 0;       // installed pack count
     bool settings_pack_media_available = false, settings_pack_images_available = false;
     bool settings_pack_media_installed = false; // the FFmpeg pack itself is on disk
@@ -1506,7 +1506,7 @@ struct WindowViewModel {
     bool settings_update_downloading = false;
     bool settings_update_installing = false;
     bool settings_update_available = false;
-    bool settings_update_auto = true;  // background checks + reminders (AppPrefs::auto_check_updates)
+    bool settings_update_auto = false; // background checks + reminders (AppPrefs::auto_check_updates)
     bool settings_diagnostics_exporting = false;
     // 备份与迁移 (page 3): a task runs / an import waits for the restart /
     // a pre-import backup exists, and its time.

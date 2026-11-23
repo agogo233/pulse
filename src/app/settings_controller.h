@@ -159,7 +159,7 @@ public:
         bool media_available = false, images_available = false;
         bool media_installed = false;     // the FFmpeg pack itself is on disk
         bool enabled = true, use_custom = false, remove_on_uninstall = true;
-        bool auto_update = true;          // 自动更新预览增强包
+        bool auto_update = false;         // 自动更新预览增强包
         uint32_t download_source = 0;     // 下载源 (app::UpdateSource)
         uint32_t installed = 0;
         uint64_t bytes = 0;

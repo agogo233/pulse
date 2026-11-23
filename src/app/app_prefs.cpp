@@ -155,7 +155,7 @@ void AppPrefs::ResetToDefaults() {
     tray_icon_size = 48;
     show_hints = true;
     status_hints_learned = false;
-    auto_check_updates = true;
+    auto_check_updates = false;
     tips_seen = 0;
     toolbar_new_primary = 0;
     toolbar_last_new = 0;
@@ -695,7 +695,7 @@ bool AppPrefs::FromJson(const std::wstring& json) {
     tray_icon_size = pulse::json::ExtractInt(json, L"tray_icon_size", 48);
     show_hints = pulse::json::ExtractBool(json, L"show_hints", true);
     status_hints_learned = pulse::json::ExtractBool(json, L"status_hints_learned", false);
-    auto_check_updates = pulse::json::ExtractBool(json, L"auto_check_updates", true);
+    auto_check_updates = pulse::json::ExtractBool(json, L"auto_check_updates", false);
     const int seen = pulse::json::ExtractInt(json, L"tips_seen", 0);
     tips_seen = seen > 0 ? static_cast<uint32_t>(seen) : 0u;
     const int new_primary = pulse::json::ExtractInt(json, L"toolbar_new_primary", 0);

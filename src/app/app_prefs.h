@@ -213,7 +213,7 @@ struct AppPrefs {
     bool show_hints = true;
     bool status_hints_learned = false; // Retire status-bar onboarding after a file operation.
     // Background update checks and their "update available" toasts (Settings > About).
-    bool auto_check_updates = true;
+    bool auto_check_updates = false;
     uint32_t tips_seen = 0; // bit per app::TeachTip already shown or dismissed
     // 自定义工具栏 (toolbar redesign note 5): the New button's main part makes
     // 0 a folder, 1 the type made last (toolbar_last_new: 0 folder, 1 text

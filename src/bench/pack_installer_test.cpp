@@ -475,7 +475,8 @@ int wmain(int argc, wchar_t** argv) {
     {   // Background updates take an installed pack in use, and only a newer release.
         using packs::PackAutoUpdateWanted;
         using packs::PackId;
-        const packs::PackSettings on{};
+        packs::PackSettings on{};
+        on.auto_update = true;   // 基线：后台自动更新开启
         packs::InstalledPack older;
         older.present = true;
         older.version = L"1.0.1";
@@ -499,9 +500,10 @@ int wmain(int argc, wchar_t** argv) {
               !PackAutoUpdateWanted(PackId::Media, own_ffmpeg, older, L"1.0.2") &&
               PackAutoUpdateWanted(PackId::Raw, own_ffmpeg, older, L"1.0.2"),
               "the setting, a switched-off pack and the user's own FFmpeg keep packs as they are");
-        Check(on.auto_update && packs::ParsePackSettings(L"{}").auto_update &&
+        Check(!packs::ParsePackSettings(L"{}").auto_update &&
+              packs::ParsePackSettings(packs::SerializePackSettings(on)).auto_update &&
               !packs::ParsePackSettings(packs::SerializePackSettings(off)).auto_update,
-              "background updates default on and turning them off is saved");
+              "background updates default off and the saved switch round-trips");
     }
 
     {   // installed.json names a directory inside its pack, nothing else.

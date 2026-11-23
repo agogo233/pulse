@@ -80,7 +80,7 @@ struct PackSettings {
     // Media pack only: an FFmpeg the user already has (path to ffmpeg.exe).
     bool use_custom_ffmpeg = false;
     std::wstring custom_ffmpeg;
-    bool auto_update = true;        // 自动更新预览增强包, see PackAutoUpdateWanted
+    bool auto_update = false;       // 自动更新预览增强包, see PackAutoUpdateWanted
     // 下载源 (app::UpdateSource): 0 automatic, 1 GitHub, 2 mirror 1 (ghproxy.net),
     // 3 mirror 2 (gh-proxy.com). Packs and Pulse's own update both use it.
     uint32_t download_source = 0;
@@ -95,7 +95,7 @@ inline PackSettings ParsePackSettings(const std::wstring& text) {
     s.enabled[3] = json::ExtractBool(text, L"archive_enabled", true);
     s.use_custom_ffmpeg = json::ExtractBool(text, L"ffmpeg_use_custom", false);
     s.custom_ffmpeg = json::ExtractString(text, L"ffmpeg_custom_path");
-    s.auto_update = json::ExtractBool(text, L"auto_update", true);
+    s.auto_update = json::ExtractBool(text, L"auto_update", false);
     const int source = json::ExtractInt(text, L"download_source", 0);
     s.download_source = source >= 0 && source <= 3 ? static_cast<uint32_t>(source) : 0u;
     s.remove_on_uninstall = json::ExtractBool(text, L"remove_on_uninstall", true);
