@@ -1,7 +1,8 @@
 // color_rule_ui.cpp — the caller behind the 颜色规则 panel: builds the rows,
-// runs the edit loop and writes the draft back to the store on 完成. Field
-// edits are follow-up Fluent menus (text input through the filter edit, like
-// the tab group rename).
+// serves the panel's requests (add, cascading field menus, import, export)
+// and writes the draft back to the store on 完成. Name/extensions edit via
+// the filter edit (like the tab group rename); the other fields are flyout
+// choices inside one cascading menu opened at the rule's row.
 #include "color_rule_ui.h"
 
 #include "app_state.h"
@@ -190,149 +191,122 @@ bool EditTextField(AppState& s, const std::wstring& current, std::wstring& out, 
     return false;
 }
 
-// One radio choice out of `items` (command = kXxxBase + index).
-bool PickRadio(AppState& s, const std::vector<ui::FluentMenuItem>& items, int base, int& out,
-               POINT screen_pt) {
-    if (!EnsureMenu(s)) return false;
-    const int command = s.menu->TrackPopup(screen_pt, items);
-    if (command <= 0) return false;
-    const int index = command - base;
-    if (index < 0) return false;
-    out = index;
-    return true;
+// The text-input menu opens at the field row's own spot: the field menu was
+// anchored just below the rule's row, so field row i sits about i Fluent menu
+// rows (36 DIP) below the anchor.
+POINT FieldMenuPoint(const POINT& anchor, float scale, int field_row) {
+    return POINT{ anchor.x, anchor.y + static_cast<LONG>(field_row * 36.0f * scale) };
 }
 
-// Attribute flags: one toggle row each; the caller flips the bit.
-bool EditAttrsField(AppState& s, DWORD current, DWORD& out, POINT screen_pt) {
-    if (!EnsureMenu(s)) return false;
-    std::vector<ui::FluentMenuItem> items;
-    for (size_t i = 0; i < std::size(kAttrPresets); ++i) {
-        ui::FluentMenuItem item = MenuRow(static_cast<int>(kAttrBase) + i, kAttrPresets[i].label);
-        item.checked = (current & kAttrPresets[i].mask) != 0;
-        item.toggle = true;
-        items.push_back(std::move(item));
-    }
-    const int command = s.menu->TrackPopup(screen_pt, items);
-    if (command <= 0) return false;
-    const size_t index = static_cast<size_t>(command - static_cast<int>(kAttrBase));
-    if (index >= std::size(kAttrPresets)) return false;
-    out = (current & kAttrPresets[index].mask)
-        ? (current & ~kAttrPresets[index].mask)
-        : (current | kAttrPresets[index].mask);
-    return true;
-}
-
-// Colour: one row of palette swatches, like the tab group colour picker.
-bool EditColorField(AppState& s, uint32_t current, uint32_t& out, POINT screen_pt) {
-    if (!EnsureMenu(s)) return false;
-    ui::FluentMenuItem row;
-    row.command = kColorField;
-    row.text = l10n::Get(I::ColorRuleFieldColor);
-    for (size_t i = 0; i < kColorRulePaletteCount; ++i) {
-        ui::FluentMenuSwatch swatch;
-        swatch.command = static_cast<int>(kColorBase) + i;
-        swatch.color = ui::HexColor(kColorRulePalette[i]);
-        swatch.checked = kColorRulePalette[i] == current;
-        row.quick_swatches.push_back(swatch);
-    }
-    row.separator_after = true;
-    const int command = s.menu->TrackPopup(screen_pt, std::vector<ui::FluentMenuItem>{std::move(row)});
-    if (command <= 0) return false;
-    const size_t index = static_cast<size_t>(command - static_cast<int>(kColorBase));
-    if (index >= kColorRulePaletteCount) return false;
-    out = kColorRulePalette[index];
-    return true;
-}
-
-void EditRuleFields(AppState& s, std::vector<ui::ColorRuleRow>& rows, ui::ColorRuleView& view) {
+// The rule's fields open as one cascading menu: each field row's flyout holds
+// its choices (radio presets, attribute toggles, the colour swatches), so a
+// selection is a single click at the field's own position. Name and
+// extensions are text inputs, opened at the field row's spot.
+void EditRuleFields(AppState& s, std::vector<ui::ColorRuleRow>& rows, int row,
+                    const POINT& anchor) {
+    if (row < 0 || static_cast<size_t>(row) >= rows.size()) return;
+    ColorRule& rule = rows[static_cast<size_t>(row)].rule;
     if (!EnsureMenu(s)) return;
-    if (view.focus < 0 || static_cast<size_t>(view.focus) >= rows.size()) return;
-    ColorRule& rule = rows[static_cast<size_t>(view.focus)].rule;
+
     std::vector<ui::FluentMenuItem> fields;
     fields.push_back(MenuRow(kNameField, I::ColorRuleFieldName));
     fields.push_back(MenuRow(kExtsField, I::ColorRuleFieldExts));
-    fields.push_back(MenuRow(kSizeField, I::ColorRuleFieldSize));
-    fields.push_back(MenuRow(kDateField, I::ColorRuleFieldDate));
-    fields.push_back(MenuRow(kAttrsField, I::ColorRuleFieldAttrs));
-    fields.push_back(MenuRow(kScopeField, I::ColorRuleFieldScope));
-    fields.push_back(MenuRow(kColorField, I::ColorRuleFieldColor));
-    const int field = s.menu->TrackPopup(view.action_pt, fields);
+    {
+        ui::FluentMenuItem item = MenuRow(kSizeField, I::ColorRuleFieldSize);
+        for (size_t i = 0; i < std::size(kSizePresets); ++i) {
+            ui::FluentMenuItem child = MenuRow(static_cast<int>(kSizeBase) + i, kSizePresets[i].label);
+            child.radio = true;
+            child.checked = kSizePresets[i].size == rule.size;
+            item.children.push_back(std::move(child));
+        }
+        fields.push_back(std::move(item));
+    }
+    {
+        ui::FluentMenuItem item = MenuRow(kDateField, I::ColorRuleFieldDate);
+        for (size_t i = 0; i < std::size(kDatePresets); ++i) {
+            ui::FluentMenuItem child = MenuRow(static_cast<int>(kDateBase) + i, kDatePresets[i].label);
+            child.radio = true;
+            child.checked = kDatePresets[i].date == rule.date;
+            item.children.push_back(std::move(child));
+        }
+        fields.push_back(std::move(item));
+    }
+    {
+        ui::FluentMenuItem item = MenuRow(kAttrsField, I::ColorRuleFieldAttrs);
+        for (size_t i = 0; i < std::size(kAttrPresets); ++i) {
+            ui::FluentMenuItem child = MenuRow(static_cast<int>(kAttrBase) + i, kAttrPresets[i].label);
+            child.toggle = true;
+            child.checked = (rule.attrs_any & kAttrPresets[i].mask) != 0;
+            item.children.push_back(std::move(child));
+        }
+        fields.push_back(std::move(item));
+    }
+    {
+        ui::FluentMenuItem item = MenuRow(kScopeField, I::ColorRuleFieldScope);
+        for (size_t i = 0; i < std::size(kScopePresets); ++i) {
+            ui::FluentMenuItem child = MenuRow(static_cast<int>(kScopeBase) + i, kScopePresets[i].label);
+            child.radio = true;
+            child.checked = kScopePresets[i].scope == rule.scope;
+            item.children.push_back(std::move(child));
+        }
+        fields.push_back(std::move(item));
+    }
+    {
+        ui::FluentMenuItem item = MenuRow(kColorField, I::ColorRuleFieldColor);
+        for (size_t i = 0; i < kColorRulePaletteCount; ++i) {
+            ui::FluentMenuSwatch swatch;
+            swatch.command = static_cast<int>(kColorBase) + i;
+            swatch.color = ui::HexColor(kColorRulePalette[i]);
+            swatch.checked = kColorRulePalette[i] == rule.color;
+            item.quick_swatches.push_back(swatch);
+        }
+        fields.push_back(std::move(item));
+    }
+
+    const int field = s.menu->TrackPopup(anchor, std::move(fields));
     if (field <= 0) return;
-    const POINT pt = view.action_pt;
     switch (field) {
     case kNameField: {
         std::wstring value;
-        if (EditTextField(s, rule.name_wildcard, value, I::ColorRuleFieldName, pt))
+        if (EditTextField(s, rule.name_wildcard, value, I::ColorRuleFieldName,
+                          FieldMenuPoint(anchor, s.scale, 0)))
             rule.name_wildcard = value;
         break;
     }
     case kExtsField: {
         std::wstring value;
-        if (EditTextField(s, rule.exts, value, I::ColorRuleFieldExts, pt))
+        if (EditTextField(s, rule.exts, value, I::ColorRuleFieldExts,
+                          FieldMenuPoint(anchor, s.scale, 1)))
             rule.exts = value;
         break;
     }
-    case kSizeField: {
-        std::vector<ui::FluentMenuItem> items;
-        for (size_t i = 0; i < std::size(kSizePresets); ++i) {
-            ui::FluentMenuItem item = MenuRow(static_cast<int>(kSizeBase) + i, kSizePresets[i].label);
-            item.radio = true;
-            item.checked = kSizePresets[i].size == rule.size;
-            items.push_back(std::move(item));
+    case kColorField:
+        break;   // the swatches on the flyout row carry the commands
+    default: {
+        // A flyout child: command = preset base + index.
+        const int cmd = field;
+        if (cmd >= kSizeBase && cmd < kSizeBase + static_cast<int>(std::size(kSizePresets))) {
+            rule.size = kSizePresets[static_cast<size_t>(cmd - kSizeBase)].size;
+        } else if (cmd >= kDateBase && cmd < kDateBase + static_cast<int>(std::size(kDatePresets))) {
+            rule.date = kDatePresets[static_cast<size_t>(cmd - kDateBase)].date;
+        } else if (cmd >= kAttrBase && cmd < kAttrBase + static_cast<int>(std::size(kAttrPresets))) {
+            const DWORD mask = kAttrPresets[static_cast<size_t>(cmd - kAttrBase)].mask;
+            rule.attrs_any = (rule.attrs_any & mask) ? (rule.attrs_any & ~mask)
+                                                     : (rule.attrs_any | mask);
+        } else if (cmd >= kScopeBase && cmd < kScopeBase + static_cast<int>(std::size(kScopePresets))) {
+            rule.scope = kScopePresets[static_cast<size_t>(cmd - kScopeBase)].scope;
+        } else if (cmd >= kColorBase && cmd < kColorBase + static_cast<int>(kColorRulePaletteCount)) {
+            rule.color = kColorRulePalette[static_cast<size_t>(cmd - kColorBase)];
         }
-        int index = 0;
-        if (PickRadio(s, items, static_cast<int>(kSizeBase), index, pt) &&
-            index < static_cast<int>(std::size(kSizePresets)))
-            rule.size = kSizePresets[static_cast<size_t>(index)].size;
         break;
     }
-    case kDateField: {
-        std::vector<ui::FluentMenuItem> items;
-        for (size_t i = 0; i < std::size(kDatePresets); ++i) {
-            ui::FluentMenuItem item = MenuRow(static_cast<int>(kDateBase) + i, kDatePresets[i].label);
-            item.radio = true;
-            item.checked = kDatePresets[i].date == rule.date;
-            items.push_back(std::move(item));
-        }
-        int index = 0;
-        if (PickRadio(s, items, static_cast<int>(kDateBase), index, pt) &&
-            index < static_cast<int>(std::size(kDatePresets)))
-            rule.date = kDatePresets[static_cast<size_t>(index)].date;
-        break;
     }
-    case kAttrsField: {
-        DWORD attrs = 0;
-        if (EditAttrsField(s, rule.attrs_any, attrs, pt)) rule.attrs_any = attrs;
-        break;
-    }
-    case kScopeField: {
-        std::vector<ui::FluentMenuItem> items;
-        for (size_t i = 0; i < std::size(kScopePresets); ++i) {
-            ui::FluentMenuItem item = MenuRow(static_cast<int>(kScopeBase) + i, kScopePresets[i].label);
-            item.radio = true;
-            item.checked = kScopePresets[i].scope == rule.scope;
-            items.push_back(std::move(item));
-        }
-        int index = 0;
-        if (PickRadio(s, items, static_cast<int>(kScopeBase), index, pt) &&
-            index < static_cast<int>(std::size(kScopePresets)))
-            rule.scope = kScopePresets[static_cast<size_t>(index)].scope;
-        break;
-    }
-    case kColorField: {
-        uint32_t color = 0;
-        if (EditColorField(s, rule.color, color, pt)) rule.color = color;
-        break;
-    }
-    default:
-        break;
-    }
-    rows[static_cast<size_t>(view.focus)].summary = ColorRuleSummary(rule);
+    rows[static_cast<size_t>(row)].summary = ColorRuleSummary(rule);
 }
 
 } // namespace
 
-void ShowColorRules(AppState& s, POINT screen_pt) {
+void ShowColorRules(AppState& s) {
     ui::ColorRuleText text;
     text.title = l10n::Get(I::ColorRulePanelTitle);
     text.hint = l10n::Get(I::ColorRulePanelHint);
@@ -343,55 +317,51 @@ void ShowColorRules(AppState& s, POINT screen_pt) {
     text.done = l10n::Get(I::ColorRuleDone);
     text.empty = l10n::Get(I::ColorRuleEmpty);
     text.max = l10n::Get(I::ColorRuleMax);
+    text.import_label = l10n::Get(I::ColorRuleImport);
+    text.export_label = l10n::Get(I::ColorRuleExport);
 
     ui::ColorRuleView view;
     std::vector<ui::ColorRuleRow> rows = RuleRows();
-    for (;;) {
-        const ui::ColorRuleAction action = ui::ColorRulePopup::Edit(
-            s.hwnd, &s.compositor, s.scale, screen_pt, s.darkMode, s.accentColor,
-            text, rows, view, static_cast<int>(kMaxColorRules));
-        if (action == ui::ColorRuleAction::Cancelled) return;
-        if (action == ui::ColorRuleAction::Closed) {
-            std::vector<ColorRule> rules;
-            rules.reserve(rows.size());
-            for (const ui::ColorRuleRow& row : rows) rules.push_back(row.rule);
-            ColorRuleStore::Instance().SetRules(std::move(rules));
-            return;
-        }
-        view.reopen = true;   // a reopen after a follow-up menu shows at once
-        switch (action) {
-        case ui::ColorRuleAction::Add:
-            if (rows.size() < kMaxColorRules) {
-                ui::ColorRuleRow row;
-                row.rule = DefaultRule(rows.size());
-                row.summary = ColorRuleSummary(row.rule);
-                rows.push_back(std::move(row));
-            }
-            break;
-        case ui::ColorRuleAction::Remove:
-            if (view.focus >= 0 && static_cast<size_t>(view.focus) < rows.size())
-                rows.erase(rows.begin() + static_cast<std::ptrdiff_t>(view.focus));
-            break;
-        case ui::ColorRuleAction::Up:
-            if (view.focus > 0) {
-                std::swap(rows[static_cast<size_t>(view.focus)],
-                          rows[static_cast<size_t>(view.focus - 1)]);
-                --view.focus;   // keep pointing at the moved row
-            }
-            break;
-        case ui::ColorRuleAction::Down:
-            if (view.focus >= 0 && static_cast<size_t>(view.focus) + 1 < rows.size()) {
-                std::swap(rows[static_cast<size_t>(view.focus)],
-                          rows[static_cast<size_t>(view.focus + 1)]);
-                ++view.focus;   // keep pointing at the moved row
-            }
-            break;
-        case ui::ColorRuleAction::Edit:
-            EditRuleFields(s, rows, view);
-            break;
-        default:
+    auto on_request = [&](ui::ColorRuleRequest request, const ui::ColorRuleRequestContext& ctx) {
+        switch (request) {
+        case ui::ColorRuleRequest::Add: {
+            if (rows.size() >= kMaxColorRules) return;
+            ui::ColorRuleRow row;
+            row.rule = DefaultRule(rows.size());
+            row.summary = ColorRuleSummary(row.rule);
+            rows.push_back(std::move(row));
             break;
         }
+        case ui::ColorRuleRequest::EditRule:
+            EditRuleFields(s, rows, ctx.row, ctx.anchor);
+            break;
+        case ui::ColorRuleRequest::Import: {
+            std::wstring file;
+            if (!PickJsonFile(ctx.panel, false, nullptr, file)) return;
+            if (ColorRuleStore::Instance().ImportFrom(file) < 0) {
+                MessageBeep(MB_ICONWARNING);
+                return;
+            }
+            rows = RuleRows();   // the import replaced the saved rules
+            break;
+        }
+        case ui::ColorRuleRequest::Export: {
+            std::wstring file;
+            if (PickJsonFile(ctx.panel, true, L"pulse-color-rules.json", file) &&
+                !ColorRuleStore::Instance().ExportTo(file))
+                MessageBeep(MB_ICONWARNING);
+            break;
+        }
+        }
+    };
+    const ui::ColorRuleAction action = ui::ColorRulePopup::Edit(
+        s.hwnd, &s.compositor, s.scale, s.darkMode, s.accentColor,
+        text, rows, view, static_cast<int>(kMaxColorRules), on_request);
+    if (action == ui::ColorRuleAction::Closed) {
+        std::vector<ColorRule> rules;
+        rules.reserve(rows.size());
+        for (const ui::ColorRuleRow& row : rows) rules.push_back(row.rule);
+        ColorRuleStore::Instance().SetRules(std::move(rules));
     }
 }
 

@@ -5192,6 +5192,8 @@ enum class StringId : UINT {
     ColorRuleAttrCompressed = IDS_COLOR_RULE_ATTR_COMPRESSED,
     ColorRuleAttrEncrypted = IDS_COLOR_RULE_ATTR_ENCRYPTED,
     ColorRulesEditCommand = IDS_COLOR_RULES_EDIT_COMMAND,
+    ColorRuleImport = IDS_COLOR_RULE_IMPORT,
+    ColorRuleExport = IDS_COLOR_RULE_EXPORT,
 };
 
 bool IsLanguageId(std::wstring_view id) noexcept;

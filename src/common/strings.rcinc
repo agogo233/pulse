@@ -5182,6 +5182,8 @@ BEGIN
     IDS_COLOR_RULE_ATTR_ENCRYPTED "加密"
     IDS_COLOR_RULES_EDIT_COMMAND "编辑颜色规则"
     IDS_TRANSFER_CAT_COLOR_RULES "颜色规则"
+    IDS_COLOR_RULE_IMPORT "导入…"
+    IDS_COLOR_RULE_EXPORT "导出…"
 END
 
 LANGUAGE 0x09, 0x01
@@ -10363,6 +10365,8 @@ BEGIN
     IDS_COLOR_RULE_ATTR_ENCRYPTED "Encrypted"
     IDS_COLOR_RULES_EDIT_COMMAND "Edit colour rules"
     IDS_TRANSFER_CAT_COLOR_RULES "Color rules"
+    IDS_COLOR_RULE_IMPORT "Import…"
+    IDS_COLOR_RULE_EXPORT "Export…"
 END
 
 // Traditional Chinese (Taiwan), generated from the Simplified entries above.

@@ -9,9 +9,10 @@ namespace pulse {
 
 struct AppState;
 
-// Opens the 颜色规则 flyout at screen_pt (the settings button or the command
-// palette). Edits accumulate in a draft; Esc drops them, 完成 writes the rows
-// to the ColorRuleStore.
-void ShowColorRules(AppState& s, POINT screen_pt);
+// Opens the 颜色规则 flyout centred on the main window. Edits accumulate in
+// a draft; Esc drops them, 完成 writes the rows to the ColorRuleStore. The
+// panel stays open while rules are added or edited and while the JSON file
+// dialogs run; import/export act on the store directly.
+void ShowColorRules(AppState& s);
 
 } // namespace pulse

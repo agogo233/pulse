@@ -5200,5 +5200,7 @@
 #define IDS_COLOR_RULE_ATTR_COMPRESSED                                                   6477
 #define IDS_COLOR_RULE_ATTR_ENCRYPTED                                                    6478
 #define IDS_COLOR_RULES_EDIT_COMMAND                                                     6479
+#define IDS_COLOR_RULE_IMPORT                                                            6481
+#define IDS_COLOR_RULE_EXPORT                                                            6482
 
 #endif  // PULSE_STRING_IDS_H

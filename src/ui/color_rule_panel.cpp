@@ -4,10 +4,16 @@
 // with Direct2D into an offscreen bitmap, read back, and shown with
 // UpdateLayeredWindow; a modal message loop runs until the panel closes.
 //
-// Card (DIP): width 440; title row 34; hint 22; rows 34 (at most 10 before the
-// list scrolls; the list keeps its height); divider; footer 32 with
-// 添加规则 / 上移 / 下移 / 删除 on the left and 完成 on the right.
-// Row: enable check box, colour dot, condition summary.
+// The card is centred on the owner window's client area (clamped to the
+// monitor's work area) and re-centres when the rule count changes the card
+// height. Rule mutations happen in place; follow-ups (field menu, import,
+// export) run through the caller's request handler while the panel stays
+// open, and the modal loop only ends on Esc / 完成 / a click outside.
+//
+// Card (DIP): width 440; title row 34 with 导入 / 导出 on the right; hint 22;
+// rows 34 (at most 10 before the list scrolls; the list keeps its height);
+// divider; footer 32 with 添加规则 / 上移 / 下移 / 删除 on the left and 完成
+// on the right. Row: enable check box, colour dot, condition summary.
 #include "color_rule_panel.h"
 
 #include "../app/color_rule.h"
@@ -49,7 +55,7 @@ constexpr float kFooterH = 32.0f;
 constexpr float kPadBottom = 14.0f;
 constexpr int kShadow = FluentMenu::kShadowMargin;
 
-enum class Part { None, Row, Check, Add, Up, Down, Remove, Done };
+enum class Part { None, Row, Check, Add, Up, Down, Remove, Done, Import, Export };
 
 struct Hit {
     Part part = Part::None;
@@ -59,6 +65,7 @@ struct Hit {
 
 struct State {
     HWND hwnd = nullptr;
+    HWND owner = nullptr;
     Compositor* compositor = nullptr;
     float scale = 1.0f;
     Theme theme{};
@@ -66,6 +73,7 @@ struct State {
     const ColorRuleText* text = nullptr;
     std::vector<ColorRuleRow>* rows = nullptr;
     ColorRuleView* view = nullptr;
+    ColorRuleRequestHandler request;
     int max_rules = 100;
     ColorRuleAction result = ColorRuleAction::Cancelled;
     bool done = false;
@@ -79,6 +87,8 @@ struct State {
     // Window pixels, shadow margin included.
     D2D1_RECT_F r_card{};
     D2D1_RECT_F r_title{};
+    D2D1_RECT_F r_import{};
+    D2D1_RECT_F r_export{};
     D2D1_RECT_F r_hint{};
     D2D1_RECT_F r_list{};
     D2D1_RECT_F r_divider{};
@@ -136,8 +146,17 @@ void Layout(State& s) {
     float y = kPadTop;
     const float title_top = m + Px(s, y);
     const float title_bottom = m + Px(s, y + kTitleH);
+    // 导入 / 导出: ghost buttons on the title row's right edge.
+    const float io_top = title_top + Px(s, (kTitleH - 22.0f) / 2.0f);
+    const float io_bottom = io_top + Px(s, 22.0f);
+    const float export_w = (std::max)(Px(s, 52.0f), s.painter.MeasureButtonWidth(s.text->export_label));
+    const float import_w = (std::max)(Px(s, 52.0f), s.painter.MeasureButtonWidth(s.text->import_label));
+    s.r_export = D2D1::RectF(s.r_card.right - Px(s, kPadX) - export_w, io_top,
+                             s.r_card.right - Px(s, kPadX), io_bottom);
+    s.r_import = D2D1::RectF(s.r_export.left - Px(s, 6.0f) - import_w, io_top,
+                             s.r_export.left - Px(s, 6.0f), io_bottom);
     s.r_title = D2D1::RectF(s.r_card.left + Px(s, kPadX), title_top,
-                            s.r_card.right - Px(s, kPadX), title_bottom);
+                            s.r_import.left - Px(s, 8.0f), title_bottom);
     y += kTitleH;
     s.r_hint = rect(kPadX, y, kCardW - kPadX, y + kHintH);
     y += kHintH + kListGap;
@@ -186,6 +205,8 @@ bool ActionEnabled(const State& s, Part part) {
 }
 
 Hit HitTest(const State& s, float x, float y) {
+    if (Contains(s.r_import, x, y)) return { Part::Import, -1 };
+    if (Contains(s.r_export, x, y)) return { Part::Export, -1 };
     if (Contains(s.r_add, x, y)) return { Part::Add, -1 };
     if (Contains(s.r_up, x, y)) return { Part::Up, -1 };
     if (Contains(s.r_down, x, y)) return { Part::Down, -1 };
@@ -295,6 +316,10 @@ bool Render(State& s) {
     const D2D1_COLOR_F background = s.theme.surface_flyout;
     s.painter.DrawText(s.text->title, s.r_title, s.compositor->TextFormat(), s.theme.text,
                        fluent::HorizontalAlignment::Left, background);
+    DrawPanelButton(s, s.r_import, s.text->import_label, {}, fluent::ButtonKind::Standard,
+                    Part::Import, false);
+    DrawPanelButton(s, s.r_export, s.text->export_label, {}, fluent::ButtonKind::Standard,
+                    Part::Export, false);
     const std::wstring& hint = RowCount(s) >= s.max_rules ? s.text->max : s.text->hint;
     s.painter.DrawText(hint, s.r_hint, s.compositor->SmallFormat(),
                        s.theme.text_secondary, fluent::HorizontalAlignment::Left, background);
@@ -418,20 +443,75 @@ void RefreshHot(State& s) {
     s.hot = HitTest(s, static_cast<float>(pt.x), static_cast<float>(pt.y));
 }
 
-// The caller's follow-up menu opens under the focused row (or the pointer).
-void FinishAction(State& s, ColorRuleAction action, const POINT* client_pt = nullptr) {
-    POINT pt{};
+// Mirror the panel's interaction state back into the caller's view struct.
+void SyncView(State& s) {
+    s.view->focus = s.focus;
+    s.view->scroll = s.scroll / s.scale;
+}
+
+// The card is centred on the owner's client area; recompute after the rule
+// count changed the card height (and clamp to the monitor's work area).
+void Relayout(State& s) {
+    Layout(s);
+    POINT centre{ 0, 0 };
+    if (s.owner) {
+        RECT rc{};
+        GetClientRect(s.owner, &rc);
+        centre = POINT{ (rc.left + rc.right) / 2, (rc.top + rc.bottom) / 2 };
+        ClientToScreen(s.owner, &centre);
+    }
+    HMONITOR monitor = MonitorFromPoint(centre, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi{ sizeof(mi) };
+    GetMonitorInfoW(monitor, &mi);
+    s.base_x = std::clamp(centre.x - s.win_w / 2, mi.rcWork.left,
+                          (std::max)(mi.rcWork.left, mi.rcWork.right - s.win_w));
+    s.base_y = std::clamp(centre.y - s.win_h / 2, mi.rcWork.top,
+                          (std::max)(mi.rcWork.top, mi.rcWork.bottom - s.win_h));
+}
+
+void RemoveFocused(State& s) {
+    if (s.focus < 0 || s.focus >= RowCount(s)) return;
+    s.rows->erase(s.rows->begin() + static_cast<std::ptrdiff_t>(s.focus));
+    if (s.focus >= RowCount(s)) s.focus = RowCount(s) - 1;
+    SyncView(s);
+    Relayout(s);
+    RefreshHot(s);
+    Repaint(s);
+}
+
+// A follow-up (rule fields menu, import, export) runs through the caller's
+// handler while the panel stays open; the rows may change, so re-clamp,
+// re-layout and repaint before continuing the panel's modal loop.
+void RequestAction(State& s, ColorRuleRequest request, const POINT* client_pt = nullptr) {
+    // Drop a pending press first: a WM_LBUTTONUP released while a nested menu
+    // runs is still dispatched here (the menu dismisses on BUTTONDOWN only),
+    // and acting on it could erase rows a field edit holds references into.
+    s.press = {};
+    if (GetCapture() == s.hwnd) ReleaseCapture();
+    ColorRuleRequestContext ctx;
+    ctx.row = s.focus;
     if (client_pt) {
-        pt = *client_pt;
+        ctx.anchor = *client_pt;
+        ClientToScreen(s.hwnd, &ctx.anchor);
     } else if (s.focus >= 0) {
         const D2D1_RECT_F row = RowRect(s, s.focus);
-        pt = POINT{ static_cast<LONG>(row.left + Px(s, 54.0f)), static_cast<LONG>(row.bottom) };
+        POINT pt = POINT{ static_cast<LONG>(row.left + Px(s, 54.0f)), static_cast<LONG>(row.bottom) };
+        ClientToScreen(s.hwnd, &pt);
+        ctx.anchor = pt;
     } else {
-        pt = POINT{ static_cast<LONG>(s.r_add.left), static_cast<LONG>(s.r_add.bottom) };
+        POINT pt = POINT{ static_cast<LONG>(s.r_add.left), static_cast<LONG>(s.r_add.bottom) };
+        ClientToScreen(s.hwnd, &pt);
+        ctx.anchor = pt;
     }
-    ClientToScreen(s.hwnd, &pt);
-    s.view->action_pt = pt;
-    Finish(s, action);
+    ctx.panel = s.hwnd;
+    if (s.request) s.request(request, ctx);
+    if (s.focus >= RowCount(s)) s.focus = RowCount(s) - 1;
+    SyncView(s);
+    Relayout(s);
+    RefreshHot(s);
+    Repaint(s);
+    SetForegroundWindow(s.hwnd);
+    SetFocus(s.hwnd);
 }
 
 bool HandleKey(State& s, WPARAM key) {
@@ -466,10 +546,10 @@ bool HandleKey(State& s, WPARAM key) {
         }
         return true;
     case VK_F2:
-        if (s.focus >= 0) FinishAction(s, ColorRuleAction::Edit);
+        if (s.focus >= 0) RequestAction(s, ColorRuleRequest::EditRule);
         return true;
     case VK_DELETE:
-        if (s.focus >= 0) FinishAction(s, ColorRuleAction::Remove);
+        RemoveFocused(s);
         return true;
     default:
         return false;
@@ -495,7 +575,7 @@ LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         const Hit hit = HitTest(*s, x, y);
         if (msg == WM_LBUTTONDBLCLK && hit.part == Part::Row) {
             s->focus = hit.index;
-            FinishAction(*s, ColorRuleAction::Edit);
+            RequestAction(*s, ColorRuleRequest::EditRule);
             return 0;
         }
         if (hit.part == Part::None) return 0;
@@ -543,10 +623,40 @@ LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             case Part::Row:
                 s->focus = hit.index;
                 break;
-            case Part::Add: FinishAction(*s, ColorRuleAction::Add); return 0;
-            case Part::Up: FinishAction(*s, ColorRuleAction::Up); return 0;
-            case Part::Down: FinishAction(*s, ColorRuleAction::Down); return 0;
-            case Part::Remove: FinishAction(*s, ColorRuleAction::Remove); return 0;
+            case Part::Add: {
+                const int before = RowCount(*s);
+                RequestAction(*s, ColorRuleRequest::Add);
+                if (RowCount(*s) > before) {   // focus the appended row
+                    s->focus = RowCount(*s) - 1;
+                    EnsureVisible(*s, s->focus);
+                    SyncView(*s);
+                    Repaint(*s);
+                }
+                return 0;
+            }
+            case Part::Up:
+                if (s->focus > 0) {
+                    std::iter_swap(s->rows->begin() + s->focus,
+                                   s->rows->begin() + (s->focus - 1));
+                    --s->focus;
+                    SyncView(*s);
+                    EnsureVisible(*s, s->focus);
+                    Repaint(*s);
+                }
+                return 0;
+            case Part::Down:
+                if (s->focus >= 0 && s->focus < RowCount(*s) - 1) {
+                    std::iter_swap(s->rows->begin() + s->focus,
+                                   s->rows->begin() + (s->focus + 1));
+                    ++s->focus;
+                    SyncView(*s);
+                    EnsureVisible(*s, s->focus);
+                    Repaint(*s);
+                }
+                return 0;
+            case Part::Remove: RemoveFocused(*s); return 0;
+            case Part::Import: RequestAction(*s, ColorRuleRequest::Import); return 0;
+            case Part::Export: RequestAction(*s, ColorRuleRequest::Export); return 0;
             case Part::Done: Finish(*s, ColorRuleAction::Closed); return 0;
             default: break;
             }
@@ -560,7 +670,7 @@ LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         const Hit hit = HitTest(*s, static_cast<float>(pt.x), static_cast<float>(pt.y));
         if (hit.part != Part::Row && hit.part != Part::Check) return 0;
         s->focus = hit.index;
-        FinishAction(*s, ColorRuleAction::Edit, &pt);
+        RequestAction(*s, ColorRuleRequest::EditRule, &pt);
         return 0;
     }
     case WM_MOUSEWHEEL: {
@@ -657,10 +767,11 @@ void Init(State& s, Compositor* compositor, float scale, const Theme& theme,
 } // namespace
 
 ColorRuleAction ColorRulePopup::Edit(HWND owner, Compositor* compositor, float scale,
-                                      POINT screen_pt, bool dark, D2D1_COLOR_F accent,
+                                      bool dark, D2D1_COLOR_F accent,
                                       const ColorRuleText& text,
                                       std::vector<ColorRuleRow>& rows, ColorRuleView& view,
-                                      int max_rules) {
+                                      int max_rules,
+                                      const ColorRuleRequestHandler& on_request) {
     if (!compositor || !compositor->Dc() || !RegisterPanelClass())
         return ColorRuleAction::Cancelled;
 
@@ -668,41 +779,30 @@ ColorRuleAction ColorRulePopup::Edit(HWND owner, Compositor* compositor, float s
     Init(s, compositor, scale,
          IsHighContrast() ? MakeHighContrastTheme() : MakeTheme(dark, accent), text,
          rows, view, max_rules);
+    s.owner = owner;
+    s.request = on_request;
+    Relayout(s);   // size the card and centre it on the owner's client area
 
     s.hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW, kClassName, L"", WS_POPUP,
                              0, 0, s.win_w, s.win_h, owner, nullptr,
                              GetModuleHandleW(nullptr), &s);
     if (!s.hwnd) return ColorRuleAction::Cancelled;
 
-    HMONITOR monitor = MonitorFromPoint(screen_pt, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi{ sizeof(mi) };
-    GetMonitorInfoW(monitor, &mi);
-    s.base_x = std::clamp(screen_pt.x - kShadow, mi.rcWork.left,
-                          (std::max)(mi.rcWork.left, mi.rcWork.right - s.win_w));
-    s.base_y = std::clamp(screen_pt.y - kShadow, mi.rcWork.top,
-                          (std::max)(mi.rcWork.top, mi.rcWork.bottom - s.win_h));
-
-    // Fade in while sliding down by the menu travel, 170 ms OutCubic; a
-    // reopen after a follow-up menu shows at once.
+    // Fade in over 150 ms; a centred panel does not slide.
     if (Render(s)) {
         ShowWindow(s.hwnd, SW_SHOW);
         SetForegroundWindow(s.hwnd);
-        if (!view.reopen) {
-            const auto t0 = std::chrono::steady_clock::now();
-            constexpr fluent::MotionSpec slide{ 170.0f, fluent::EasingCurve::OutCubic };
-            for (;;) {
-                const float elapsed = static_cast<float>(
-                    std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::steady_clock::now() - t0).count());
-                if (elapsed >= slide.duration_ms) break;
-                const float p = fluent::EvaluateMotion(slide, elapsed);
-                const int dy = -static_cast<int>(
-                    std::lround((1.0f - p) * fluent::motion::MenuTravelDip * s.scale));
-                const BYTE alpha = static_cast<BYTE>(
-                    std::clamp(elapsed / 120.0f, 0.0f, 1.0f) * 255.0f);
-                Present(s, alpha, dy);
-                Sleep(10);
-            }
+        const auto t0 = std::chrono::steady_clock::now();
+        constexpr float kFadeMs = 150.0f;
+        for (;;) {
+            const float elapsed = static_cast<float>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - t0).count());
+            if (elapsed >= kFadeMs) break;
+            const BYTE alpha = static_cast<BYTE>(
+                std::clamp(elapsed / kFadeMs, 0.0f, 1.0f) * 255.0f);
+            Present(s, alpha, 0);
+            Sleep(10);
         }
         Present(s, 255, 0);
     } else {
@@ -724,7 +824,6 @@ ColorRuleAction ColorRulePopup::Edit(HWND owner, Compositor* compositor, float s
 
     const ColorRuleAction result = s.result;
     view.focus = s.focus;
-    view.anchor = s.focus;
     view.scroll = s.scroll / s.scale;
     DestroyWindow(s.hwnd);
     DestroySurface(s);

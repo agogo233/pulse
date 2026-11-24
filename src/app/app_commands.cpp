@@ -1872,19 +1872,9 @@ void DispatchMenuCommand(AppState& s, int cmd) {
     case app::CmdSelectWildcard:
         ShowWildcardSelect(s);
         break;
-    case app::CmdEditColorRules: {
-        // Open under the pointer; the palette leaves it where the user was.
-        POINT pt{};
-        GetCursorPos(&pt);
-        if (pt.x <= 0 && pt.y <= 0) {
-            HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-            MONITORINFO mi{ sizeof(mi) };
-            GetMonitorInfoW(monitor, &mi);
-            pt = { (mi.rcWork.left + mi.rcWork.right) / 2, (mi.rcWork.top + mi.rcWork.bottom) / 2 };
-        }
-        ShowColorRules(s, pt);
+    case app::CmdEditColorRules:
+        ShowColorRules(s);
         break;
-    }
     case app::CmdProperties: {
         // Shell properties on the ops open thread. A multi-selection opens one
         // merged sheet (like Explorer) instead of the focused item's sheet.
@@ -5640,36 +5630,6 @@ void ShowSearchFilterMenu(AppState& s, int chip, RECT control_rect) {
     NavigateTo(s, app::MakeSearchPath(app::CompileSearchQuery(spec)));
 }
 
-// Windows' own JSON file dialog (导出别名 / 导入别名, 标签库).
-bool PickJsonFile(HWND owner, bool save, const wchar_t* file_name, std::wstring& out) {
-    IFileDialog* dlg = nullptr;
-    const HRESULT hr = save
-        ? CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_INPROC_SERVER, IID_IFileSaveDialog,
-                           reinterpret_cast<void**>(&dlg))
-        : CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_IFileOpenDialog,
-                           reinterpret_cast<void**>(&dlg));
-    if (FAILED(hr) || !dlg) return false;
-    const COMDLG_FILTERSPEC spec{L"JSON", L"*.json"};
-    dlg->SetFileTypes(1, &spec);
-    dlg->SetDefaultExtension(L"json");
-    if (save && file_name) dlg->SetFileName(file_name);
-    bool ok = false;
-    if (SUCCEEDED(dlg->Show(owner))) {
-        IShellItem* item = nullptr;
-        if (SUCCEEDED(dlg->GetResult(&item)) && item) {
-            PWSTR path = nullptr;
-            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)) && path) {
-                out = path;
-                CoTaskMemFree(path);
-                ok = true;
-            }
-            item->Release();
-        }
-    }
-    dlg->Release();
-    return ok;
-}
-
 // 管理别名: every alias (type to filter), click opens the item, the row's ×
 // removes the alias; 导出 / 导入 below.
 void ShowAliasManager(AppState& s) {
@@ -5800,6 +5760,36 @@ void RememberPaletteAction(int action) {
 }
 
 } // namespace
+
+// Windows' own JSON file dialog (导出别名 / 导入别名, 标签库, 颜色规则).
+bool PickJsonFile(HWND owner, bool save, const wchar_t* file_name, std::wstring& out) {
+    IFileDialog* dlg = nullptr;
+    const HRESULT hr = save
+        ? CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_INPROC_SERVER, IID_IFileSaveDialog,
+                           reinterpret_cast<void**>(&dlg))
+        : CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_IFileOpenDialog,
+                           reinterpret_cast<void**>(&dlg));
+    if (FAILED(hr) || !dlg) return false;
+    const COMDLG_FILTERSPEC spec{L"JSON", L"*.json"};
+    dlg->SetFileTypes(1, &spec);
+    dlg->SetDefaultExtension(L"json");
+    if (save && file_name) dlg->SetFileName(file_name);
+    bool ok = false;
+    if (SUCCEEDED(dlg->Show(owner))) {
+        IShellItem* item = nullptr;
+        if (SUCCEEDED(dlg->GetResult(&item)) && item) {
+            PWSTR path = nullptr;
+            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)) && path) {
+                out = path;
+                CoTaskMemFree(path);
+                ok = true;
+            }
+            item->Release();
+        }
+    }
+    dlg->Release();
+    return ok;
+}
 
 void ShowOmnibar(AppState& s, OmnibarMode mode) {
     // Editing a path is navigation, not a palette search with an empty-result row.

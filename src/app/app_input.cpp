@@ -3513,9 +3513,7 @@ LRESULT HandleLButtonDown(AppState* s, HWND hwnd, UINT msg, WPARAM wParam, LPARA
             case ui::HitTestResult::SettingsLanCache: SetLanCacheMode(*s, hit.index); break;
             case ui::HitTestResult::SettingsThumbCache: s->settings.ClearThumbCache(); break;
             case ui::HitTestResult::SettingsColorRules: {
-                POINT pt{mx, my};
-                ClientToScreen(hwnd, &pt);
-                ShowColorRules(*s, pt);
+                ShowColorRules(*s);
                 break;
             }
             case ui::HitTestResult::SettingsMtimeStyle: s->settings.MtimeStyle(hit.index); break;
