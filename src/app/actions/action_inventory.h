@@ -164,6 +164,7 @@ inline constexpr ActionEntry kActions[] = {
     {"alias.display", ActionRisk::View},
     {"alias.manage", ActionRisk::View},
     {"alias.export", ActionRisk::Create},
+    {"alias.color_rules", ActionRisk::View},
     // 暂存托盘
     {"tray.add", ActionRisk::Organize},
     {"tray.remove", ActionRisk::Organize},
@@ -396,6 +397,7 @@ inline constexpr MenuCmdLink kMenuCmdLinks[] = {
     {CmdSetAlias, {"alias.set"}},
     {CmdAliasDisplayBase, {"alias.display"}},
     {CmdManageAliases, {"alias.manage"}},
+    {CmdEditColorRules, {"alias.color_rules"}},
     {CmdExportAliases, {"alias.export"}},
     {CmdImportAliases, {"alias.export"}},
     {CmdAliasBase, {"nav.go"}},
