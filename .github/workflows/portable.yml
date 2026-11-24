@@ -1,6 +1,9 @@
 name: Portable build (Win x64)
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       PDFIUM_USE_PREBUILT:
