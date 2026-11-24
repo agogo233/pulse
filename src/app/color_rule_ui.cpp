@@ -27,7 +27,6 @@ using app::ColorRuleSize;
 using app::kColorRulePalette;
 using app::kColorRulePaletteCount;
 using app::kMaxColorRules;
-using app::I;
 using l10n::Get;
 
 namespace {
