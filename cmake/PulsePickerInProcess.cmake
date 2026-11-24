@@ -89,6 +89,7 @@ set(PULSE_PICKER_INPROCESS_SOURCES
     src/ui/snack_style.cpp
     src/ui/svg_bitmap.cpp
     src/app/places.cpp
+    src/app/color_rule.cpp
     src/app/device_registry.cpp
     src/app/builtin_menu_items.cpp
     src/app/search_query.cpp
