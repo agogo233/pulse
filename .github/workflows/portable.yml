@@ -52,27 +52,12 @@ jobs:
           $version = (Get-Content version.txt -Raw).Trim()
           if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Unexpected version.txt content: $version" }
           "PULSE_VERSION=$version" >> $env:GITHUB_ENV
-          # Keep in sync with tools/pack_installer/pack_installer.py DEFAULT_LAYOUT.
-          $binaries = @('pulse.exe', 'Pulse.AI.exe', 'Pulse.Content.exe', 'Pulse.Document.exe',
-            'Pulse.Index.exe', 'Pulse.Preview.exe', 'pulse_elevated.exe', 'pulse_hotkey_broker.exe',
-            'pulse_shell.exe', 'pulse_start_pin.dll', 'pulse_integration.exe', 'lumatext.dll', 'pdfium.dll')
-          $stage = 'dist/portable-win-x64'
-          New-Item -ItemType Directory -Force $stage | Out-Null
-          foreach ($binary in $binaries) {
-            $source = Join-Path 'build-ci' $binary
-            if (-not (Test-Path $source)) { throw "Missing portable payload file: $binary" }
-            Copy-Item $source $stage -Force
-          }
-          $manifest = Get-ChildItem $stage -File | Sort-Object Name | ForEach-Object {
-            $stream = [IO.File]::OpenRead($_.FullName)
-            $sha256 = [Security.Cryptography.SHA256]::Create()
-            try { $hash = [BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '') }
-            finally { $stream.Dispose(); $sha256.Dispose() }
-            [pscustomobject]@{ name = $_.Name; sha256 = $hash }
-          }
-          ConvertTo-Json -InputObject @{ version = $version; files = @($manifest) } |
-            Set-Content (Join-Path $stage 'SHA256SUMS.json') -Encoding UTF8
-          Write-Output "Staged $($manifest.Count) portable binaries for Pulse $version"
+          # Verified installed layout: stable launcher, version pointer and the
+          # content-addressed DialogBridge bundle, so the dialog take-over
+          # feature works from a pure extraction. The file list is inherited
+          # from tools/pack_installer/pack_installer.py DEFAULT_LAYOUT.
+          python scripts/pack_portable.py --root . --build build-ci --version $version --out dist/portable-win-x64
+          if ($LASTEXITCODE -ne 0) { throw 'Portable staging failed' }
       - uses: actions/upload-artifact@v4
         with:
           name: Pulse-${{ env.PULSE_VERSION }}-portable-win-x64
