@@ -10,13 +10,11 @@
 #pragma once
 #include "FluentTokens.h"
 
+#include "../app/color_rule.h"
+
 #include <windows.h>
 #include <string>
 #include <vector>
-
-namespace pulse::app {
-struct ColorRule;
-}
 
 namespace pulse::ui {
 
