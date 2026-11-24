@@ -24,6 +24,7 @@ namespace pulse::app { bool RunMediaColumnResizeCapture(); }
 #include "arrival_select.h"
 #include "zip_compress_ui.h"
 #include "folder_alias.h"
+#include "color_rule.h"
 #include "../common/runtime_log.h"
 #include "../index/filename_pinyin.h"
 #include "../common/windows_compat.h"
