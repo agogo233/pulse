@@ -75,9 +75,6 @@ uint32_t DaysOf(ColorRuleDate date) {
 
 } // namespace
 
-// Out of line so ~unique_ptr<ColorRulePattern> sees the complete type.
-ColorRuleStore::~ColorRuleStore() = default;
-
 void ColorRuleStore::Load(const std::wstring& file) {
     std::wstring text;
     std::vector<ColorRule> loaded;
@@ -298,7 +295,7 @@ void ColorRuleStore::RebuildLocked() {
     patterns_.clear();
     patterns_.reserve(rules_.size());
     for (const ColorRule& rule : rules_)
-        patterns_.push_back(std::make_unique<ColorRulePattern>(NamePattern(rule.name_wildcard, false)));
+        patterns_.push_back(std::make_shared<ColorRulePattern>(NamePattern(rule.name_wildcard, false)));
 }
 
 } // namespace pulse::app

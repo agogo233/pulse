@@ -96,14 +96,7 @@ public:
     // file has no rules array.
     int ImportFrom(const std::wstring& file);
 
-    // Out of line: the members hold unique_ptr<ColorRulePattern>, whose type
-    // is only completed in color_rule.cpp.
-    ~ColorRuleStore();
-
 private:
-    ColorRuleStore(const ColorRuleStore&) = delete;
-    ColorRuleStore& operator=(const ColorRuleStore&) = delete;
-
     std::wstring SerializeLocked() const;
     void RebuildLocked();
 
@@ -111,7 +104,10 @@ private:
     std::wstring file_;
     std::vector<ColorRule> rules_;
     // Compiled name patterns, one per rule, rebuilt with the rule list.
-    std::vector<std::unique_ptr<ColorRulePattern>> patterns_;
+    // shared_ptr (not unique_ptr): its destructor accepts the incomplete
+    // ColorRulePattern, so the header stays free of the pinyin tables behind
+    // NamePattern while Instance() can live in the header.
+    std::vector<std::shared_ptr<ColorRulePattern>> patterns_;
     std::atomic<bool> master_{false};
 };
 
