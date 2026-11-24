@@ -75,6 +75,9 @@ uint32_t DaysOf(ColorRuleDate date) {
 
 } // namespace
 
+// Out of line so ~unique_ptr<ColorRulePattern> sees the complete type.
+ColorRuleStore::~ColorRuleStore() = default;
+
 void ColorRuleStore::Load(const std::wstring& file) {
     std::wstring text;
     std::vector<ColorRule> loaded;

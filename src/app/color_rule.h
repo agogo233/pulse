@@ -96,7 +96,14 @@ public:
     // file has no rules array.
     int ImportFrom(const std::wstring& file);
 
+    // Out of line: the members hold unique_ptr<ColorRulePattern>, whose type
+    // is only completed in color_rule.cpp.
+    ~ColorRuleStore();
+
 private:
+    ColorRuleStore(const ColorRuleStore&) = delete;
+    ColorRuleStore& operator=(const ColorRuleStore&) = delete;
+
     std::wstring SerializeLocked() const;
     void RebuildLocked();
 
