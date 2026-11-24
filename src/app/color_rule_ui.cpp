@@ -30,8 +30,6 @@ using app::kMaxColorRules;
 using app::I;
 using l10n::Get;
 
-namespace app {
-
 namespace {
 
 using I = l10n::StringId;
@@ -398,5 +396,4 @@ void ShowColorRules(AppState& s, POINT screen_pt) {
     }
 }
 
-} // namespace app
 } // namespace pulse
