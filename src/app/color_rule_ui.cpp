@@ -17,7 +17,20 @@
 #include <utility>
 #include <vector>
 
-namespace pulse::app {
+namespace pulse {
+
+using app::ColorRule;
+using app::ColorRuleScope;
+using app::ColorRuleDate;
+using app::ColorRuleStore;
+using app::ColorRuleSize;
+using app::kColorRulePalette;
+using app::kColorRulePaletteCount;
+using app::kMaxColorRules;
+using app::I;
+using l10n::Get;
+
+namespace app {
 
 namespace {
 
@@ -385,4 +398,5 @@ void ShowColorRules(AppState& s, POINT screen_pt) {
     }
 }
 
-} // namespace pulse::app
+} // namespace app
+} // namespace pulse
