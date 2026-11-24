@@ -94,3 +94,6 @@ CONERR$
 # Local scratch: experiment backups and size/test scripts.
 /_backups/
 /.size-test/
+
+# Python bytecode from test fixture generators
+__pycache__/

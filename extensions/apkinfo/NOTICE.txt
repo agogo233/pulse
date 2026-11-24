@@ -1,0 +1,22 @@
+The Pulse APK Info extension vendors miniz for reading the ZIP central
+directory of Android package files.
+
+miniz, from the richgel999/miniz master sources (MZ_VERSION 11.3.2):
+miniz.h, miniz_common.h, miniz_tdef.h, miniz_tinfl.h, miniz_zip.h and the
+implementation split into miniz_core.c (default allocators and mz_version),
+miniz_tinfl.c, miniz_tdef.c, miniz_zip.c and the zlib-subset helpers in
+miniz_zlib.c, concatenated by the miniz.c amalgamation.
+Copyright Richard Geldreich, Jr. and contributors.
+License: public domain / unlicense (see the license grant at the end of
+miniz.h). Source: https://github.com/richgel999/miniz
+
+Note: the amalgamated miniz.c is compiled with a reduced warning level
+(/W3) because the vendored third-party C source does not target the
+project's /W4 policy; this exemption is deliberate and limited to that
+file.
+
+The Android binary XML (AXML) parser follows the layout documented by the
+Android open source project (ResourceTypes.h) with reference to the
+minimal header-attribute reader ibilux/AXmlAttributes and the
+zero-dependency reader xuange-hu/manifestvet (both public repositories,
+read for format confirmation only; no code copied).
