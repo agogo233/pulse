@@ -268,13 +268,15 @@ int ColorRuleStore::ImportFrom(const std::wstring& file) {
 }
 
 std::wstring ColorRuleStore::SerializeLocked() const {
-    std::wstring out = L"{\n  \"version\": 1,\n  \"enabled\": " +
-                       (master_.load(std::memory_order_relaxed) ? L"true" : L"false") + L",\n  \"rules\": [";
+    std::wstring out = L"{\n  \"version\": 1,\n  \"enabled\": ";
+    out += master_.load(std::memory_order_relaxed) ? L"true" : L"false";
+    out += L",\n  \"rules\": [";
     for (size_t i = 0; i < rules_.size(); ++i) {
         const ColorRule& rule = rules_[i];
-        out += (i == 0 ? L"\n    " : L",\n    ") + L"{\n      \"enabled\": " +
-               (rule.enabled ? L"true" : L"false") +
-               L",\n      \"scope\": " + std::to_wstring(static_cast<int>(rule.scope)) +
+        out += i == 0 ? L"\n    " : L",\n    ";
+        out += L"{\n      \"enabled\": ";
+        out += rule.enabled ? L"true" : L"false";
+        out += L",\n      \"scope\": " + std::to_wstring(static_cast<int>(rule.scope)) +
                L",\n      \"name\": \"";
         json::Escape(rule.name_wildcard, out);
         out += L"\",\n      \"exts\": \"";
@@ -282,7 +284,8 @@ std::wstring ColorRuleStore::SerializeLocked() const {
         out += L"\",\n      \"size\": " + std::to_wstring(static_cast<int>(rule.size)) +
                L",\n      \"date\": " + std::to_wstring(static_cast<int>(rule.date)) +
                L",\n      \"attrs\": " + std::to_wstring(rule.attrs_any) +
-               L",\n      \"color\": " + std::to_wstring(rule.color) + L"\n    }";
+               L",\n      \"color\": " + std::to_wstring(rule.color);
+        out += L"\n    }";
     }
     out += rules_.empty() ? L"]\n}\n" : L"\n  ]\n}\n";
     return out;
