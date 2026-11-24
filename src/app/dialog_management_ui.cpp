@@ -75,6 +75,8 @@ void DialogManagementReady(AppState& s) {
             result.configuration=current->snapshot.configuration;
             result.bundle_verified=current->snapshot.bundle_verified;
             result.bundle_error=current->snapshot.bundle_error;
+            result.bundle_stage=current->snapshot.bundle_stage;
+            result.bundle_custom=current->snapshot.bundle_custom;
         }
         const DWORD previous_error=current->error;
         if(operation!=app::DialogManagementOperation::Refresh || result.error) current->error=result.error;

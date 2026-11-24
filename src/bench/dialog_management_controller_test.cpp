@@ -227,7 +227,9 @@ int wmain(int argc,wchar_t** argv){
             auto result=Await(c,c.Refresh());
             pulse::dialog_bundle::BundleLease installed;
             const auto installed_error=pulse::dialog_bundle::ResolveInstalledBundle(fs::path(Self()).parent_path().wstring(),installed);
-            Check(result && result->bundle_error==installed_error && result->configuration.bundle_root==installed.Directory(),"formal refresh resolves only the installed pointer snapshot");
+            Check(result && result->bundle_error==installed_error && result->configuration.bundle_root==installed.Directory() &&
+                (installed_error==ERROR_SUCCESS || result->bundle_stage==pulse::dialog_bundle::kStagePointer),
+                "formal refresh resolves only the installed pointer snapshot");
             installed=pulse::dialog_bundle::BundleLease{};
             result=Await(c,c.SelectBundle(argv[2]));Check(result && !result->error && result->bundle_verified,"verified component fixture accepted");
             if(!result || result->error || !result->bundle_verified)
@@ -260,13 +262,17 @@ int wmain(int argc,wchar_t** argv){
         result=Await(c,c.SelectApplication(Self()));
         Check(result && !result->error && result->application_valid,"selection retry validates same-architecture own fixture");
         result=Await(c,c.SelectBundle(L"C:\\missing-bundle"));
-        Check(result && result->error && result->application_valid && !result->bundle_verified,"failed package selection retains valid application");
+        Check(result && result->error && result->application_valid && !result->bundle_verified &&
+            result->bundle_stage==pulse::dialog_bundle::kStagePath,"failed package selection retains valid application");
         result=Await(c,c.ExportDiagnostics());
         Check(result && !result->error && !result->diagnostics_path.empty() && fs::path(result->diagnostics_path).parent_path()==root/L"state","diagnostics exported only to isolated state directory");
         if(result && !result->diagnostics_path.empty()) {
             std::ifstream input{fs::path(result->diagnostics_path)};
             const std::string contents((std::istreambuf_iterator<char>(input)),{});
-            Check(contents.find("Scope: status only")!=std::string::npos && contents.find("auto_enabled=")!=std::string::npos && contents.find("C:")==std::string::npos,"diagnostics contain status but no selected paths or raw logs");
+            Check(contents.find("Scope: status only")!=std::string::npos && contents.find("auto_enabled=")!=std::string::npos &&
+                contents.find("bundle_mode=")!=std::string::npos && contents.find("bundle_stage=")!=std::string::npos &&
+                contents.find("auto_path_mismatch=")!=std::string::npos && contents.find("application_valid=")!=std::string::npos &&
+                contents.find("C:")==std::string::npos,"diagnostics contain status but no selected paths or raw logs");
         }
         c.Refresh();c.Cancel();Check(c.Drain().empty(),"cancel removes previous result generation");
         result=Await(c,c.Refresh());Check(result && result->application_valid,"refresh remains usable after cancellation");

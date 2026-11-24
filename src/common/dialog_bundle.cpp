@@ -189,9 +189,12 @@ DWORD RecheckDirectory(const BundleLease& lease) noexcept {
     try { Require(!!lease,ERROR_INVALID_HANDLE); Enumerate(*lease.state_); return ERROR_SUCCESS; }
     catch(const Failure& f) {return f.error;} catch(const fs::filesystem_error& e) {return static_cast<DWORD>(e.code().value());} catch(...) {return ERROR_NOT_ENOUGH_MEMORY;}
 }
-DWORD VerifyBundle(const std::wstring& directory, std::string_view expected_digest, BundleLease& output) noexcept {
+DWORD VerifyBundle(const std::wstring& directory, std::string_view expected_digest, BundleLease& output, unsigned* stage) noexcept {
     output=BundleLease{};
+    unsigned local=kStageNone;
+    const auto report=[&]{if(stage)*stage=local;};
     try {
+        local=kStagePath;
         Require(expected_digest.empty()||Hex(expected_digest));
         Require(directory.size()>=3 && directory[1]==L':' && directory[2]==L'\\' && directory.find(L'/',0)==directory.npos && directory.find(L':',2)==directory.npos && directory.find(L'\0')==directory.npos,ERROR_BAD_PATHNAME);
         fs::path root(directory); Require(root.is_absolute() && root.lexically_normal()==root,ERROR_BAD_PATHNAME);
@@ -199,6 +202,7 @@ DWORD VerifyBundle(const std::wstring& directory, std::string_view expected_dige
         s->directories.push_back(Open(path,true));
         for(const auto& part:root.relative_path()) { Require(part!=L"." && part!=L"..",ERROR_BAD_PATHNAME); path/=part; s->directories.push_back(Open(path,true)); }
         s->directory=Final(s->directories.back().h);
+        local=kStageManifest;
         auto mf=Open(root/L"manifest.json",false); auto raw=Read(mf.h,1024*1024); s->digest=Digest(raw);
         Require(expected_digest.empty()||s->digest==expected_digest,ERROR_REVISION_MISMATCH);
         auto manifest=Parse(raw); Keys(manifest,{"schema","version","architecture","contract","dynamic_helpers","system_dependencies","files"});
@@ -213,8 +217,10 @@ DWORD VerifyBundle(const std::wstring& directory, std::string_view expected_dige
         const auto& dynamic=At(manifest,"dynamic_helpers"); Keys(dynamic,{"Pulse.Preview.exe","pdfium.dll","pulse_elevated.exe"});
         Require(Text(At(dynamic,"Pulse.Preview.exe"))=="src/ui/thumbnail_cache.cpp: module-relative preview worker" && Text(At(dynamic,"pdfium.dll"))=="src/preview_host/pdf_raster.cpp: dynamic PDF renderer" && Text(At(dynamic,"pulse_elevated.exe"))=="src/ops/elevated_transfer_client.cpp: explicit elevated operation helper");
         Keep(*s,root/L"manifest.json",std::move(mf)); s->expected.insert("manifest.json");
+        local=kStageMarker;
         auto marker=Open(root/L"VERIFIED.json",false); auto mark=Parse(Read(marker.h,1024)); Keys(mark,{"manifest_sha256","integrity_only"});
         Require(Text(At(mark,"manifest_sha256"))==s->digest && At(mark,"integrity_only").is_bool()&&At(mark,"integrity_only").as_bool()); Keep(*s,root/L"VERIFIED.json",std::move(marker)); s->expected.insert("verified.json");
+        local=kStageFiles;
         const auto& entries=At(manifest,"files"); Require(entries.is_array()&&entries.size()>=1&&entries.size()<=512);
         std::set<std::string> binaries,dependencies,systems;
         for(const auto& item:entries.items()) {
@@ -234,6 +240,7 @@ DWORD VerifyBundle(const std::wstring& directory, std::string_view expected_dige
                 dependencies.insert(normal.begin(),normal.end()); dependencies.insert(delay.begin(),delay.end()); binaries.insert(Lower(relative)); }
             Keep(*s,full,std::move(f));
         }
+        local=kStageClosure;
         const std::string automatic=arch=="x64"?"pulsedialogauto64.dll":"pulsedialogauto32.dll";
         const std::string wrong_automatic=arch=="x64"?"pulsedialogauto32.dll":"pulsedialogauto64.dll";
         Require(!binaries.contains(wrong_automatic));
@@ -245,12 +252,16 @@ DWORD VerifyBundle(const std::wstring& directory, std::string_view expected_dige
         for(auto name:{"licenses/pulse/license","licenses/detours/license.md","licenses/ib-pinyin/license.txt","licenses/md4c/license.md","licenses/sqlite/readme.md","licenses/lzma/readme.pulse.md"}) Require(s->expected.contains(name),ERROR_FILE_NOT_FOUND);
         for(auto group:{"licenses/lumatext/","licenses/pdfium/"}) Require(std::any_of(s->expected.begin(),s->expected.end(),[&](const auto& x){return x.starts_with(group);}),ERROR_FILE_NOT_FOUND);
         s->launcher=(root/L"PulseDialogLauncher.exe").wstring(); s->host=(root/L"pulse.exe").wstring(); s->runtime=(root/json::Wide(runtime)).wstring(); s->ui=(root/L"PulsePickerUiProof.dll").wstring();
-        Enumerate(*s); output.state_=std::move(s); return ERROR_SUCCESS;
-    } catch(const Failure& f) {return f.error;} catch(const fs::filesystem_error& e) {return static_cast<DWORD>(e.code().value());} catch(...) {return ERROR_NOT_ENOUGH_MEMORY;}
+        local=kStageEnumerate;
+        Enumerate(*s); output.state_=std::move(s); report(); return ERROR_SUCCESS;
+    } catch(const Failure& f) {report();return f.error;} catch(const fs::filesystem_error& e) {report();return static_cast<DWORD>(e.code().value());} catch(...) {report();return ERROR_NOT_ENOUGH_MEMORY;}
 }
-DWORD ResolveInstalledBundle(const std::wstring& directory, BundleLease& output) noexcept {
+DWORD ResolveInstalledBundle(const std::wstring& directory, BundleLease& output, unsigned* stage) noexcept {
     output=BundleLease{};
+    unsigned local=kStageNone;
+    const auto report=[&]{if(stage)*stage=local;};
     try {
+        local=kStagePath;
         Require(directory.size()>=3 && directory[1]==L':' && directory[2]==L'\\' &&
             directory.find(L'/')==directory.npos && directory.find(L':',2)==directory.npos &&
             directory.find(L'\0')==directory.npos,ERROR_BAD_PATHNAME);
@@ -260,6 +271,7 @@ DWORD ResolveInstalledBundle(const std::wstring& directory, BundleLease& output)
         auto path=root.root_path(); ancestors.push_back(Open(path,true));
         for(const auto& part:root.relative_path()) {path/=part;ancestors.push_back(Open(path,true));}
         std::string digest, relative;
+        local=kStagePointer;
         {
             auto pointer=Open(root/L"dialog-current.json",false,true);
             const auto value=Parse(Read(pointer.h,1024));
@@ -271,11 +283,13 @@ DWORD ResolveInstalledBundle(const std::wstring& directory, BundleLease& output)
         }
         auto selected=root/json::Wide(relative); selected.make_preferred();
         BundleLease lease;
-        const DWORD error=VerifyBundle(selected.wstring(),digest,lease);
-        if(error) return error;
+        unsigned inner=kStageNone;
+        const DWORD error=VerifyBundle(selected.wstring(),digest,lease,&inner);
+        if(error) {local=inner?inner:kStagePointer; report(); return error;}
+        local=kStageManifest;
         Require(!lease.state_->installed,ERROR_REVISION_MISMATCH);
         output=std::move(lease);
-        return ERROR_SUCCESS;
-    } catch(const Failure& f) {return f.error;} catch(const fs::filesystem_error& e) {return static_cast<DWORD>(e.code().value());} catch(...) {return ERROR_NOT_ENOUGH_MEMORY;}
+        report(); return ERROR_SUCCESS;
+    } catch(const Failure& f) {report();return f.error;} catch(const fs::filesystem_error& e) {report();return static_cast<DWORD>(e.code().value());} catch(...) {report();return ERROR_NOT_ENOUGH_MEMORY;}
 }
 }

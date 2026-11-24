@@ -25,6 +25,8 @@ struct DialogManagementResult {
     DWORD error = 0;
     bool auto_enabled = false, auto_conflict = false, auto_path_mismatch = false;
     DWORD auto_error = 0, bundle_error = 0;
+    unsigned bundle_stage = 0;
+    bool bundle_custom = false;
     std::wstring auto_dll, diagnostics_path;
     bool launcher_started = false;
     bool bundle_verified = false, application_valid = false;

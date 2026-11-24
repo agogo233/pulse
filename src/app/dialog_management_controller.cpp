@@ -55,6 +55,18 @@ std::wstring Quote(const std::wstring& value) {
     }
     result.append(slashes*2,L'\\');result+=L'"';return result;
 }
+const char* StageName(unsigned stage) {
+    switch(stage) {
+        case dialog_bundle::kStagePath: return "path";
+        case dialog_bundle::kStagePointer: return "pointer";
+        case dialog_bundle::kStageManifest: return "manifest";
+        case dialog_bundle::kStageMarker: return "marker";
+        case dialog_bundle::kStageFiles: return "files";
+        case dialog_bundle::kStageClosure: return "closure";
+        case dialog_bundle::kStageEnumerate: return "enumerate";
+        default: return "none";
+    }
+}
 DWORD ValidateApplication(std::wstring& path) {
     auto canonical=dialog_session::Canonical(path,false);WORD machine=0;
     if(canonical.empty() || !dialog_session::Machine(canonical,machine)) return ERROR_BAD_EXE_FORMAT;
@@ -143,8 +155,11 @@ struct DialogManagementController::State {
         initialized=true;return ERROR_SUCCESS;
     }
     void Verify(DialogManagementResult& result,dialog_bundle::BundleLease& bundle) {
-        result.bundle_error=installed_default ? dialog_bundle::ResolveInstalledBundle(install_root.wstring(),bundle) :
-            dialog_bundle::VerifyBundle(configuration.bundle_root,configuration.manifest_digest,bundle);
+        unsigned stage=dialog_bundle::kStageNone;
+        result.bundle_error=installed_default ? dialog_bundle::ResolveInstalledBundle(install_root.wstring(),bundle,&stage) :
+            dialog_bundle::VerifyBundle(configuration.bundle_root,configuration.manifest_digest,bundle,&stage);
+        result.bundle_stage=stage;
+        result.bundle_custom=!installed_default;
         result.bundle_verified=result.bundle_error==ERROR_SUCCESS;
         result.configuration=configuration;
         if(installed_default) {
@@ -259,10 +274,14 @@ struct DialogManagementController::State {
             const auto nonce=Unique();
             if(nonce.empty()) { result.error=ERROR_GEN_FAILURE; return result; }
             const auto path=root/(L"diagnostics-"+nonce+L".txt");
-            const std::string report="Pulse dialog integration diagnostics v1\r\nScope: status only; no raw logs, paths, filenames or file contents.\r\n"
+            const std::string report="Pulse dialog integration diagnostics v2\r\nScope: status only; no raw logs, paths, filenames or file contents.\r\n"
                 "auto_enabled="+std::to_string(result.auto_enabled)+"\r\nauto_conflict="+std::to_string(result.auto_conflict)
                 +"\r\nauto_error="+std::to_string(result.auto_error)+"\r\nbundle_verified="+std::to_string(result.bundle_verified)
-                +"\r\nbundle_error="+std::to_string(result.bundle_error)+"\r\n";
+                +"\r\nbundle_error="+std::to_string(result.bundle_error)
+                +"\r\nbundle_mode="+(result.bundle_custom?"custom":"installed")
+                +"\r\nbundle_stage="+StageName(result.bundle_stage)
+                +"\r\nauto_path_mismatch="+std::to_string(result.auto_path_mismatch)
+                +"\r\napplication_valid="+std::to_string(result.application_valid)+"\r\n";
             CurrentUserSecurityAttributes security;
             if(!security) { result.error=ERROR_ACCESS_DENIED; return result; }
             Handle file{CreateFileW(path.c_str(),GENERIC_WRITE,0,security.get(),CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr)};
