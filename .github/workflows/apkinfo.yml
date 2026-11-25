@@ -1,0 +1,140 @@
+name: APK Info extension
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'extensions/apkinfo/**'
+      - 'sdk/native/**'
+      - 'tools/extensions/pulse_ext.py'
+      - '.github/workflows/apkinfo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apkinfo-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # MSVC /W4 build of the extension plus its fixture-driven parser tests.
+  msvc-tests:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Configure
+        shell: pwsh
+        run: cmake -S extensions/apkinfo -B build-apkinfo -G Ninja
+      - name: Build DLL and tests
+        shell: pwsh
+        run: cmake --build build-apkinfo --parallel
+      - name: Generate fixtures
+        shell: pwsh
+        run: python extensions/apkinfo/test_data/make_fixtures.py fixtures
+      - name: Run parser tests
+        shell: pwsh
+        run: build-apkinfo/pulse_apkinfo_test.exe fixtures
+      - name: Stage package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path pkg -Force | Out-Null
+          Copy-Item build-apkinfo/pulse_apkinfo.dll pkg/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apkinfo-dll
+          path: pkg/
+          retention-days: 7
+          if-no-files-found: error
+
+  # Real-host integration: build pulse.exe, install and enable the package
+  # through pulse_ext.py, then capture rendered previews of an APK card for
+  # human review (light, dark, narrow details pane and hover card).
+  host-integration:
+    needs: msvc-tests
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch source-built PDFium
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $v = (Get-Content third_party/pdfium/VERSION | ForEach-Object { ($_ -split '=')[1] }) -join '.'
+          if ($v -notmatch '^\d+\.\d+\.\d+\.\d+$') { throw "Unexpected PDFium version: $v" }
+          $tag = "pdfium-$v"
+          $zip = "pdfium-$v.zip"
+          gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern $zip
+          if (-not (Test-Path $zip)) { throw "Source-built PDFium asset not found: $tag" }
+          Expand-Archive $zip -DestinationPath third_party/pdfium -Force
+          if (-not (Test-Path third_party/pdfium/bin/pdfium.dll)) {
+            throw 'Source-built pdfium.dll missing after extraction'
+          }
+      - name: Build pulse.exe (release, skip test suite)
+        shell: pwsh
+        run: ./scripts/build_release_ci.ps1 -Channel windows -SkipTests
+      - uses: actions/download-artifact@v4
+        with:
+          name: apkinfo-dll
+          path: pkg
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install and enable the package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pulse = Join-Path $env:GITHUB_WORKSPACE 'build-ci\pulse.exe'
+          $store = Join-Path $env:RUNNER_TEMP 'apkinfo-store'
+          $dll = Join-Path $env:GITHUB_WORKSPACE 'pkg\pulse_apkinfo.dll'
+          $manifest = Join-Path $env:GITHUB_WORKSPACE 'pkg\manifest.json'
+          python tools/extensions/pulse_ext.py --pulse $pulse --json native-manifest extensions/apkinfo/manifest.json --library $dll --output $manifest
+          if ($LASTEXITCODE -ne 0) { throw 'native-manifest generation failed' }
+          python tools/extensions/pulse_ext.py --pulse $pulse --json install $manifest --store $store --allow-native
+          if ($LASTEXITCODE -ne 0) { throw 'package install failed' }
+          python tools/extensions/pulse_ext.py --pulse $pulse --json enable pulse.apkinfo --store $store --allow-native
+          if ($LASTEXITCODE -ne 0) { throw 'package enable failed' }
+          "PULSE_APKINFO_STORE=$store" >> $env:GITHUB_ENV
+      - name: Stage one valid APK for deterministic row selection
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python extensions/apkinfo/test_data/make_fixtures.py fixtures
+          New-Item -ItemType Directory -Path shotdir -Force | Out-Null
+          Copy-Item fixtures/utf8.apk shotdir/
+      - name: Capture preview screenshots
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pulse = Join-Path $env:GITHUB_WORKSPACE 'build-ci\pulse.exe'
+          $shotdir = Join-Path $env:GITHUB_WORKSPACE 'shotdir'
+          New-Item -ItemType Directory -Path shots -Force | Out-Null
+          $variants = @(
+            @{ name = 'light';  args = @('--shot-details', '--size', '1000x760') },
+            @{ name = 'dark';   args = @('--shot-details', '--size', '1000x760', '--dark') },
+            @{ name = 'narrow'; args = @('--shot-details', '--size', '420x760') },
+            @{ name = 'hover';  args = @('--shot-hover-preview', '0') }
+          )
+          foreach ($variant in $variants) {
+            $out = Join-Path $env:GITHUB_WORKSPACE "shots\$($variant.name).png"
+            $argList = @('--test-instance', '--extension-store', $env:PULSE_APKINFO_STORE) + $variant.args + @('--shot', $out, $shotdir)
+            & $pulse @argList
+            if ($LASTEXITCODE -ne 0) { throw "shot $($variant.name) exited with $LASTEXITCODE" }
+            if ((Get-Item $out).Length -lt 10KB) { throw "shot $($variant.name) is suspiciously small" }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apkinfo-shots
+          path: shots/
+          retention-days: 7
+          if-no-files-found: error
