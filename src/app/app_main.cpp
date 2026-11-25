@@ -205,6 +205,8 @@ namespace pulse::app { bool RunMediaColumnResizeCapture(); }
 #include "app_internal.h"
 #include "app_network_page.h"
 #include "cloud_download.h"
+#include "extensions/runtime.h"
+#include "extensions/native/session.h"
 
 namespace {
 // Default-program changes (thumbnail "opens with" badges): one shell-level
@@ -4349,10 +4351,23 @@ int ShotModeMain(AppState& state, HWND hwnd) {
                 "path=%ls\nfirst_frame_ms=%.2f\nenum_sort_done_ms=%.2f\n",
                 state.pane && state.pane->ActiveTab() ? state.pane->ActiveTab()->current_path.c_str() : L"",
                 state.timing.first_frame_ms, state.timing.sort_done_ms);
-            if (state.shot_quick_preview && n > 0 && n < static_cast<int>(sizeof(buf)))
+            if (state.shot_quick_preview && n > 0 && n < static_cast<int>(sizeof(buf))) {
+                // Diagnose why the extension card did (not) land: popup state,
+                // store contents and per-package session status.
+                n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
+                    "quick_preview_visible=%d\n", state.quickPreview.visible() ? 1 : 0);
+                const size_t packages = pulse::extensions::PackageCount();
+                n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
+                    "packages=%zu\n", packages);
+                for (size_t package = 0; package < packages && n < static_cast<int>(sizeof(buf)) - 96; ++package)
+                    n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
+                        "pkg%zu_enabled=%d status=0x%lX\n", package,
+                        pulse::extensions::PackageEnabled(package) ? 1 : 0,
+                        static_cast<unsigned long>(pulse::extensions::native::PackageLastStatus(state.hwnd, package)));
                 n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
                     "quick_preview_ready=%d\n",
                     state.quickPreview.visible() && state.quickPreview.HasNativeModel() ? 1 : 0);
+            }
             if (n > 0) {
                 DWORD written = 0;
                 WriteFile(f, buf, (DWORD)n, &written, nullptr);
