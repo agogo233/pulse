@@ -61,7 +61,9 @@ jobs:
   host-integration:
     needs: msvc-tests
     runs-on: windows-2022
-    timeout-minutes: 90
+    # The real build takes ~18 min; 40 bounds a hung runner well under the
+    # previous 90 so it cannot stall the apkinfo concurrency slot for long.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: Fetch source-built PDFium
