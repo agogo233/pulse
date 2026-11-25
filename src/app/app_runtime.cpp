@@ -2349,6 +2349,14 @@ void HideTeachTip(AppState& s) {
 } // namespace
 
 bool UpdateTeachTip(AppState& s) {
+    if (s.shot.active) {
+        // Headless captures must not be obstructed by onboarding bubbles.
+        if (s.teachTip >= 0) {
+            HideTeachTip(s);
+            return true;
+        }
+        return false;
+    }
     const ULONGLONG now = GetTickCount64();
     if (s.teachTip >= 0) {
         const ULONGLONG shown = now - s.teachShownAt;

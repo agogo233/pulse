@@ -4264,7 +4264,10 @@ int ShotModeMain(AppState& state, HWND hwnd) {
             }
         }
         MSG msg{};
-        for (int i = 0; i < 20; ++i) {
+        // Details shots include extension preview cards, which arrive through
+        // the async preview pipeline; give them extra frames to land.
+        const int pump_frames = state.shot_details ? 60 : 20;
+        for (int i = 0; i < pump_frames; ++i) {
             while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
