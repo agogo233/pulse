@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -150,15 +151,19 @@ std::wstring ColorRuleSummary(const ColorRule& rule) {
     return out;
 }
 
-std::vector<ui::ColorRuleRow> RuleRows() {
+std::vector<ui::ColorRuleRow> RowsFromRules(std::vector<ColorRule> rules) {
     std::vector<ui::ColorRuleRow> rows;
-    for (const ColorRule& rule : ColorRuleStore::Instance().Rules()) {
+    for (ColorRule& rule : rules) {
         ui::ColorRuleRow row;
-        row.rule = rule;
-        row.summary = ColorRuleSummary(rule);
+        row.rule = std::move(rule);
+        row.summary = ColorRuleSummary(row.rule);
         rows.push_back(std::move(row));
     }
     return rows;
+}
+
+std::vector<ui::ColorRuleRow> RuleRows() {
+    return RowsFromRules(ColorRuleStore::Instance().Rules());
 }
 
 ColorRule DefaultRule(size_t index) {
@@ -322,6 +327,9 @@ void ShowColorRules(AppState& s) {
 
     ui::ColorRuleView view;
     std::vector<ui::ColorRuleRow> rows = RuleRows();
+    // An import only becomes the draft's master switch here; it reaches the
+    // store when the user keeps the edit, so Esc still drops it.
+    std::optional<bool> imported_master;
     auto on_request = [&](ui::ColorRuleRequest request, const ui::ColorRuleRequestContext& ctx) {
         switch (request) {
         case ui::ColorRuleRequest::Add: {
@@ -338,11 +346,17 @@ void ShowColorRules(AppState& s) {
         case ui::ColorRuleRequest::Import: {
             std::wstring file;
             if (!PickJsonFile(ctx.panel, false, nullptr, file)) return;
-            if (ColorRuleStore::Instance().ImportFrom(file) < 0) {
+            std::vector<ColorRule> imported;
+            bool master = false;
+            // A second import chains on the draft's master, not the saved one.
+            if (!app::ParseColorRulesFile(file, imported,
+                                          imported_master.value_or(ColorRuleStore::Instance().MasterEnabled()),
+                                          master)) {
                 MessageBeep(MB_ICONWARNING);
                 return;
             }
-            rows = RuleRows();   // the import replaced the saved rules
+            rows = RowsFromRules(std::move(imported));
+            imported_master = master;
             break;
         }
         case ui::ColorRuleRequest::Export: {
@@ -362,6 +376,9 @@ void ShowColorRules(AppState& s) {
         rules.reserve(rows.size());
         for (const ui::ColorRuleRow& row : rows) rules.push_back(row.rule);
         ColorRuleStore::Instance().SetRules(std::move(rules));
+        // A kept import also restores the master switch it carried.
+        if (imported_master && ColorRuleStore::Instance().MasterEnabled() != *imported_master)
+            ColorRuleStore::Instance().SetMasterEnabled(*imported_master);
     }
 }
 
