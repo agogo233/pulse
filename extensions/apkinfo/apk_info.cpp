@@ -1,6 +1,8 @@
 // apk_info.cpp - orchestrates ZIP open, manifest extraction and AXML parse.
 #include "apk_info.h"
+#include "arsc_parser.h"
 #include "axml_parser.h"
+#include "res_string_pool.h"  // axml::kTypeReference
 #include "zip_reader.h"
 #include <windows.h>
 #include <algorithm>
@@ -8,6 +10,7 @@
 namespace apk_info {
 namespace {
 constexpr size_t kMaxManifestBytes = 4u * 1024 * 1024;
+constexpr size_t kMaxArscBytes = 8u * 1024 * 1024;  // cap the resource table read
 constexpr size_t kMaxPermissions = 256;  // display cap is lower; parse cap bounds memory
 
 // The label attribute is usually a resource reference (@string/...); only a
@@ -65,6 +68,22 @@ Status Load(const std::wstring& path, const std::function<bool()>& cancelled, In
         out.package = package->value;
     if (out.package.empty()) return Status::NotApk;
     out.label = document.application ? LiteralLabel(*document.application) : std::string{};
+    // A label stored as a resource reference (@string/...) needs the resource
+    // table to become text; without a resolution the card falls back to the
+    // package name. A missing or oversized table degrades gracefully.
+    if (out.label.empty() && document.application) {
+        if (const auto* label = document.application->Find("android:label");
+            label && label->data_type == axml::kTypeReference && label->data != 0) {
+            if (stopped()) return Status::Cancelled;
+            std::vector<uint8_t> table;
+            if (zip_reader::Extract(archive, "resources.arsc", kMaxArscBytes, table) ==
+                zip_reader::Status::Ok) {
+                std::string resolved;
+                if (arsc::ResolveString(table.data(), table.size(), label->data, resolved))
+                    out.label = std::move(resolved);
+            }
+        }
+    }
     out.version_name = VersionText(document);
     if (document.uses_sdk) {
         if (const auto* min_sdk = document.uses_sdk->Find("android:minSdkVersion"))
