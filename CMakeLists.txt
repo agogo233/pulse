@@ -1635,7 +1635,7 @@ target_link_libraries(pulse_link_destination_test PRIVATE pulse_localization she
 add_executable(pulse_entry_sort_key_test src/bench/entry_sort_key_test.cpp src/app/entry_group.cpp src/app/entry_sort.cpp)
 target_link_libraries(pulse_entry_sort_key_test PRIVATE pulse_localization shlwapi)
 add_executable(pulse_color_rule_test src/bench/color_rule_test.cpp src/app/color_rule.cpp
-    src/index/filename_pinyin.cpp)
+    src/index/index_query.cpp src/index/search_kinds.cpp src/index/filename_pinyin.cpp)
 add_executable(pulse_link_pill_test src/bench/link_pill_test.cpp)
 target_link_libraries(pulse_link_pill_test PRIVATE user32)
 # Smart list dates: which days read as 周三 and which as 上周五 (pure).
