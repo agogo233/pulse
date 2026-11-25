@@ -33,6 +33,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     std::string text = "arguments=" + pulse::json::Utf8(args) + "\nruntime=" + pulse::json::Utf8(runtime) +
         "\nstable=" + pulse::json::Utf8(stable) + "\nroot=" + pulse::json::Utf8(root) +
         "\ncwd=" + pulse::json::Utf8(std::filesystem::current_path().wstring()) + "\n";
+    wchar_t bundled[32768]{};
+    const DWORD bundled_length = GetEnvironmentVariableW(L"PULSE_BUNDLED_EXTENSION_STORE", bundled, ARRAYSIZE(bundled));
+    text += "bundled_store=" + (bundled_length ? pulse::json::Utf8(bundled) : std::string()) + "\n";
     if (!record.empty()) { std::ofstream out(record, std::ios::binary); out << text; if (!out) return 3; }
     if (echo) {
         char bytes[4096]; DWORD count = 0, written = 0;

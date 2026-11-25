@@ -44,6 +44,17 @@ def main():
     assert '--launcher-wait' not in text
     assert f'root={installed}' in text and f'stable={launcher}' in text and f'cwd={output}' in text, text
     print(f'[PASS] real launcher args/stdin/stdout/stderr/exit/cwd/path mapping ({time.monotonic()-start:.3f}s)', flush=True)
+    plain_record = output / 'no-bundled-store.txt'
+    subprocess.run([launcher, '--launcher-wait', '--record', plain_record], check=True, timeout=30)
+    assert '\nbundled_store=\n' in plain_record.read_text(encoding='utf-8')
+    bundled = installed / 'extensions'
+    (bundled / 'binaries').mkdir(parents=True)
+    (bundled / 'registry.json').write_text('{"formatVersion":1,"packages":[]}', encoding='utf-8')
+    bundled_record = output / 'bundled-store.txt'
+    subprocess.run([launcher, '--launcher-wait', '--record', bundled_record], check=True, timeout=30)
+    assert f'bundled_store={bundled}' in bundled_record.read_text(encoding='utf-8')
+    shutil.rmtree(bundled)
+    print('[PASS] launcher advertises a deployed extensions store only when it exists', flush=True)
     shell_record = output / 'shell-entry.txt'
     shell_env = dict(os.environ, PULSE_LAUNCHER_PROBE_RECORD=str(shell_record))
     shell_target = str(output / 'folder space 中文')

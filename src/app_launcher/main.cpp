@@ -9,6 +9,7 @@
 #include <shlobj.h>
 #include <filesystem>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace {
@@ -109,6 +110,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR arguments, int show) {
         }
         startup.cb = sizeof(extended);
     }
+    // Advertise a deployment-bundled extension store to the host. The child
+    // inherits the environment (lpEnvironment is null), so this carries no
+    // command-line quoting concerns and stays invisible to argument parsing.
+    const std::filesystem::path bundled_store = std::filesystem::path(root) / L"extensions";
+    std::error_code bundled_error;
+    if (std::filesystem::exists(bundled_store / L"registry.json", bundled_error))
+        SetEnvironmentVariableW(L"PULSE_BUNDLED_EXTENSION_STORE", bundled_store.wstring().c_str());
     PROCESS_INFORMATION process{};
     const BOOL created = CreateProcessW(lease.Host().c_str(), command.data(), nullptr, nullptr,
         any, any ? EXTENDED_STARTUPINFO_PRESENT : 0, nullptr, nullptr, &startup, &process);

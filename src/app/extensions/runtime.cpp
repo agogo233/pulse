@@ -225,6 +225,21 @@ StartupResult PrepareStartup(int argc, wchar_t** argv) {
     }
     std::wstring discovered_store;
     if (!manifest_path) {
+        // A deployment-bundled store, advertised by the stable launcher, wins
+        // over the per-user store. Discovery stays optional: a missing or
+        // damaged bundled store only disables packages, it never blocks launch.
+        wchar_t bundled[32768]{};
+        if (GetEnvironmentVariableW(L"PULSE_BUNDLED_EXTENSION_STORE", bundled, 32768)) {
+            std::error_code bundled_error;
+            const auto bundled_root = std::filesystem::path(bundled);
+            if (bundled_root.is_absolute() && std::filesystem::exists(bundled_root / L"registry.json", bundled_error)) {
+                discovered_store = bundled_root.wstring();
+                manifest_path = discovered_store.c_str();
+                store_mode = true;
+            }
+        }
+    }
+    if (!manifest_path) {
         wchar_t base[32768]{};
         const DWORD length = GetEnvironmentVariableW(isolated ? L"PULSE_TEST_DATA_DIR" : L"LOCALAPPDATA", base, 32768);
         if (!length || length >= 32768) return {};
