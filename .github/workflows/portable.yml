@@ -72,7 +72,8 @@ jobs:
           # .apk previews work from a pure extraction with no per-user install.
           $pulse = Join-Path $env:GITHUB_WORKSPACE 'build-ci\pulse.exe'
           $dll = Join-Path $env:GITHUB_WORKSPACE 'build-apkinfo\pulse_apkinfo.dll'
-          $manifest = Join-Path $env:RUNNER_TEMP 'apkinfo-manifest.json'
+          # native-manifest requires the authored manifest to sit next to the DLL.
+          $manifest = Join-Path $env:GITHUB_WORKSPACE 'build-apkinfo\manifest.json'
           $store = Join-Path $env:RUNNER_TEMP 'apkinfo-store'
           python tools/extensions/pulse_ext.py --pulse $pulse --json native-manifest extensions/apkinfo/manifest.json --library $dll --output $manifest
           if ($LASTEXITCODE -ne 0) { throw 'apkinfo native-manifest generation failed' }
