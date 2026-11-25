@@ -3,6 +3,7 @@
 // Usage: pulse_apkinfo_test.exe [fixture-directory]
 // The fixture directory is produced by test_data/make_fixtures.py.
 #include "apk_info.h"
+#include "arsc_parser.h"
 #include "axml_parser.h"
 #include "info_model.h"
 #include "text.h"
@@ -199,6 +200,56 @@ void TestApkInfo(const std::filesystem::path& dir) {
         "cancellation honoured before work");
 }
 
+void TestArscResolution(const std::filesystem::path& dir) {
+    // The resource table resolves the label reference that the manifest alone
+    // cannot: package 0x7f, type 1 ("string"), entry 0.
+    zip_reader::Archive archive;
+    if (zip_reader::Open(Fixture(dir, "reflabel.apk"), archive) != zip_reader::Status::Ok) {
+        Check(false, "reflabel fixture opens");
+        return;
+    }
+    std::vector<uint8_t> table;
+    Check(zip_reader::Extract(archive, "resources.arsc", 1 << 20, table) ==
+              zip_reader::Status::Ok,
+        "resource table extracts");
+    zip_reader::Close(archive);
+    std::string value;
+    Check(arsc::ResolveString(table.data(), table.size(), 0x7F010000, value) &&
+              value == "Pulse Resource Label",
+        "resource id resolves to its string value");
+    std::string missing;
+    Check(!arsc::ResolveString(table.data(), table.size(), 0x7F020000, missing),
+        "absent type index is refused");
+    Check(!arsc::ResolveString(table.data(), table.size(), 0x01010000, missing),
+        "foreign package id is refused");
+    Check(!arsc::ResolveString(table.data(), table.size(), 0x7F01FFFF, missing),
+        "absent entry index is refused");
+    Check(!arsc::ResolveString(nullptr, 0, 0x7F010000, missing), "empty table refused");
+    // A truncated table must fail safely rather than read out of bounds.
+    Check(!arsc::ResolveString(table.data(), table.size() / 2, 0x7F010000, missing),
+        "truncated table refused");
+}
+
+void TestApkInfoResourceLabel(const std::filesystem::path& dir) {
+    apk_info::Info info;
+    Check(apk_info::Load(Fixture(dir, "reflabel.apk"), {}, info) == apk_info::Status::Ok,
+        "reference-label apk loads");
+    Check(info.label == "Pulse Resource Label",
+        "resource reference label resolved through the resource table");
+    Check(info.package == "com.pulse.filemanager", "reference-label package still read");
+    // The card must prefer the resolved label over the package name.
+    info_model::Card card(info);
+    const PulseUiModelTree* tree = card.Build();
+    Check(tree && tree->root, "reference-label card builds");
+    if (tree && tree->root && tree->root->children.present &&
+        tree->root->children.count > 0) {
+        const PulseUiModelNode& title = tree->root->children.data[0];
+        const std::string title_text(title.text.value.data, title.text.value.length);
+        Check(title_text == "Pulse Resource Label",
+            "card title uses the resolved resource label");
+    }
+}
+
 void TestText() {
     // The language choice depends on the machine; only non-empty output and
     // format substitution are checked here.
@@ -261,6 +312,8 @@ int main(int argc, char** argv) {
     TestAxmlUtf16(dir);
     TestAxmlHostile();
     TestApkInfo(dir);
+    TestArscResolution(dir);
+    TestApkInfoResourceLabel(dir);
     TestText();
     TestInfoModel(dir);
     std::printf(failures ? "apkinfo_test: %d FAILURE(S)\n" : "apkinfo_test: all passed\n",

@@ -55,6 +55,58 @@ def string_pool(strings, utf8: bool) -> bytes:
     return header + offsets + body
 
 
+def resources_arsc(entries: dict[int, str]) -> bytes:
+    """Minimal resources.arsc: one package (id 0x7f) with a 'string' type.
+
+    `entries` maps an entry index to its string value. The layout mirrors
+    aapt output: a table header, a global value string pool, then one package
+    holding the type and key pools plus a default-config type chunk.
+    """
+    indexes = sorted(entries)
+    global_pool = string_pool([entries[i] for i in indexes], utf8=True)
+    type_strings = string_pool(["string"], utf8=True)
+    key_strings = string_pool([f"app_name{i}" for i in indexes], utf8=True)
+
+    pkg_header_size = 284
+    type_strings_off = pkg_header_size
+    key_strings_off = type_strings_off + len(type_strings)
+
+    config = u32(4)  # minimal ResTable_config: only its size field
+    type_header_size = 20 + len(config)
+    entries_start = type_header_size + 4 * len(indexes)
+    offset_list, entry_rows, cursor = [], [], 0
+    for i, index in enumerate(indexes):
+        offset_list.append(u32(cursor))
+        entry = u16(8) + u16(0) + u32(i)              # ResTable_entry: simple
+        entry += u16(8) + bytes([0, 0x03]) + u32(i)   # Res_value: STRING, global index i
+        entry_rows.append(entry)
+        cursor += len(entry)
+    entries_blob = b"".join(entry_rows)
+    type_chunk = (
+        u16(0x0201) + u16(type_header_size)
+        + u32(type_header_size + 4 * len(indexes) + len(entries_blob))
+        + bytes([1, 0]) + u16(0)              # type id 1, flags 0, reserved
+        + u32(len(indexes)) + u32(entries_start) + config
+        + b"".join(offset_list) + entries_blob
+    )
+
+    name = "Pulse Test".encode("utf-16-le")
+    package_size = pkg_header_size + len(type_strings) + len(key_strings) + len(type_chunk)
+    package = (
+        u16(0x0200) + u16(pkg_header_size) + u32(package_size)
+        + u32(0x7F) + name + b"\x00" * (256 - len(name))
+        + u32(type_strings_off) + u32(1)
+        + u32(key_strings_off) + u32(len(indexes))
+    ) + type_strings + key_strings + type_chunk
+
+    table_header_size = 12
+    total = table_header_size + len(global_pool) + len(package)
+    return (
+        u16(0x0002) + u16(table_header_size) + u32(total) + u32(1)
+        + global_pool + package
+    )
+
+
 def attribute(ns, name, raw, data_type, data) -> bytes:
     return u32(ns) + u32(name) + u32(raw) + u16(8) + bytes([0, data_type]) + u32(data)
 
@@ -74,7 +126,8 @@ def end_element() -> bytes:
     return u16(0x0103) + u16(16) + u32(16) + u32(1) + u32(0xFFFFFFFF)
 
 
-def axml_manifest(utf8: bool, corrupt: bool = False) -> bytes:
+def axml_manifest(utf8: bool, corrupt: bool = False,
+                  label_reference: int | None = None) -> bytes:
     strings = [
         "manifest", "package", "versionName", "versionCode", "split",
         "uses-sdk", "minSdkVersion", "targetSdkVersion",
@@ -101,10 +154,18 @@ def axml_manifest(utf8: bool, corrupt: bool = False) -> bytes:
     ]
     permission_attrs = [(ns_android, 9, 0xFFFFFFFF, 0x03, 15)]  # CAMERA
     permission2_attrs = [(ns_android, 9, 0xFFFFFFFF, 0x03, 16)]  # INTERNET
-    application_attrs = [
-        (ns_android, 11, 0xFFFFFFFF, 0x03, 17),  # label = "Pulse File Manager"
-        (ns_android, 12, 0xFFFFFFFF, 0x01, 0x7F0E0001),  # icon = resource ref
-    ]
+    if label_reference is None:
+        # label = "Pulse File Manager" as a literal manifest string.
+        application_attrs = [
+            (ns_android, 11, 0xFFFFFFFF, 0x03, 17),
+            (ns_android, 12, 0xFFFFFFFF, 0x01, 0x7F0E0001),  # icon = resource ref
+        ]
+    else:
+        # label = a resource reference that only the resource table resolves.
+        application_attrs = [
+            (ns_android, 11, 0xFFFFFFFF, 0x01, label_reference),
+            (ns_android, 12, 0xFFFFFFFF, 0x01, 0x7F0E0001),  # icon = resource ref
+        ]
     body = (
         start_element(0, manifest_attrs)
         + start_element(5, uses_sdk_attrs) + end_element()
@@ -121,12 +182,13 @@ def axml_manifest(utf8: bool, corrupt: bool = False) -> bytes:
     return document
 
 
-def write_apk(path: str, manifest: bytes) -> None:
+def write_apk(path: str, manifest: bytes, arsc: bytes | None = None) -> None:
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
         info = zipfile.ZipInfo("AndroidManifest.xml")
         archive.writestr(info, manifest)
         archive.writestr(zipfile.ZipInfo("classes.dex"), b"dex\n035\x00" + b"\x00" * 64)
-        archive.writestr(zipfile.ZipInfo("resources.arsc"), b"\x02" * 128)
+        archive.writestr(zipfile.ZipInfo("resources.arsc"),
+                         arsc if arsc is not None else b"\x02" * 128)
         archive.writestr(zipfile.ZipInfo("res/mipmap/ic_launcher.png"), b"\x89PNG\r\n\x1a\n fake")
         archive.writestr(zipfile.ZipInfo("META-INF/MANIFEST.MF"), b"Manifest-Version: 1.0\n")
 
@@ -140,6 +202,11 @@ def main() -> int:
     write_apk(os.path.join(out, "utf8.apk"), axml_manifest(utf8=True))
     write_apk(os.path.join(out, "utf16.apk"), axml_manifest(utf8=False))
     write_apk(os.path.join(out, "corrupt.apk"), axml_manifest(utf8=True, corrupt=True))
+    # An application label stored as a resource reference, resolved through a
+    # real (minimal) resources.arsc: package 0x7f, type 1 ("string"), entry 0.
+    write_apk(os.path.join(out, "reflabel.apk"),
+              axml_manifest(utf8=True, label_reference=0x7F010000),
+              resources_arsc({0: "Pulse Resource Label"}))
     # A ZIP with no manifest at all.
     with zipfile.ZipFile(os.path.join(out, "nomanifest.apk"), "w") as archive:
         archive.writestr("classes.dex", b"dex")
