@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -26,6 +27,8 @@ def main() -> int:
     ap.add_argument("--version", required=True)
     ap.add_argument("--out", required=True,
                     help="output directory (relative to root or absolute); must not exist")
+    ap.add_argument("--extension-store", type=Path, default=None,
+                    help="optional pre-built extension store to ship at the payload root")
     args = ap.parse_args()
 
     root = Path(args.root).resolve()
@@ -50,6 +53,13 @@ def main() -> int:
     # verified bundle set and never changes the packaged contents.
     out.parent.mkdir(parents=True, exist_ok=True)
     dialog_pack.package_installed(actual_build, out, args.version, arch, root, items)
+
+    if args.extension_store is not None:
+        # Ship a fully built extension store (registry.json plus content-addressed
+        # binaries/ and versions/) at the payload root. It stays outside the
+        # verified DialogBridge bundle, so the bundle hash is unaffected, and the
+        # stable launcher advertises it to the host for out-of-the-box loading.
+        shutil.copytree(args.extension_store, out / "extensions")
 
     files = []
     for path in sorted(p for p in out.rglob("*") if p.is_file()):

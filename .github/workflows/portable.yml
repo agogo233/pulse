@@ -24,6 +24,9 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - name: Fetch source-built PDFium
         if: ${{ !inputs.PDFIUM_USE_PREBUILT }}
         shell: pwsh
@@ -45,6 +48,17 @@ jobs:
       - name: Build release payload (skip test suite)
         shell: pwsh
         run: ./scripts/build_release_ci.ps1 -Channel windows -SkipTests
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build apkinfo extension
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake -S extensions/apkinfo -B build-apkinfo -G Ninja
+          if ($LASTEXITCODE -ne 0) { throw 'apkinfo configure failed' }
+          cmake --build build-apkinfo --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'apkinfo build failed' }
       - name: Stage portable payload
         shell: pwsh
         run: |
@@ -52,12 +66,63 @@ jobs:
           $version = (Get-Content version.txt -Raw).Trim()
           if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Unexpected version.txt content: $version" }
           "PULSE_VERSION=$version" >> $env:GITHUB_ENV
+          if (-not (Test-Path 'build-ci\pulse_launcher.exe')) { throw 'stable launcher (pulse_launcher.exe) missing from build-ci' }
+          # Build the first-party apkinfo extension against this exact host and
+          # install it into a store that ships inside the portable payload, so
+          # .apk previews work from a pure extraction with no per-user install.
+          $pulse = Join-Path $env:GITHUB_WORKSPACE 'build-ci\pulse.exe'
+          $dll = Join-Path $env:GITHUB_WORKSPACE 'build-apkinfo\pulse_apkinfo.dll'
+          $manifest = Join-Path $env:RUNNER_TEMP 'apkinfo-manifest.json'
+          $store = Join-Path $env:RUNNER_TEMP 'apkinfo-store'
+          python tools/extensions/pulse_ext.py --pulse $pulse --json native-manifest extensions/apkinfo/manifest.json --library $dll --output $manifest
+          if ($LASTEXITCODE -ne 0) { throw 'apkinfo native-manifest generation failed' }
+          python tools/extensions/pulse_ext.py --pulse $pulse --json install $manifest --store $store --allow-native
+          if ($LASTEXITCODE -ne 0) { throw 'apkinfo package install failed' }
+          python tools/extensions/pulse_ext.py --pulse $pulse --json enable pulse.apkinfo --store $store --allow-native
+          if ($LASTEXITCODE -ne 0) { throw 'apkinfo package enable failed' }
           # Verified installed layout: stable launcher, version pointer and the
           # content-addressed DialogBridge bundle, so the dialog take-over
           # feature works from a pure extraction. The file list is inherited
-          # from tools/pack_installer/pack_installer.py DEFAULT_LAYOUT.
-          python scripts/pack_portable.py --root . --build build-ci --version $version --out dist/portable-win-x64
+          # from tools/pack_installer/pack_installer.py DEFAULT_LAYOUT. The
+          # pre-built extension store travels at the payload root, outside the
+          # hash-verified bundle.
+          python scripts/pack_portable.py --root . --build build-ci --version $version --out dist/portable-win-x64 --extension-store $store
           if ($LASTEXITCODE -ne 0) { throw 'Portable staging failed' }
+      - name: Verify bundled apkinfo extension
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python extensions/apkinfo/test_data/make_fixtures.py fixtures
+          if ($LASTEXITCODE -ne 0) { throw 'apkinfo fixture generation failed' }
+          New-Item -ItemType Directory -Path shotdir -Force | Out-Null
+          Copy-Item fixtures/utf8.apk shotdir/
+          New-Item -ItemType Directory -Path shots -Force | Out-Null
+          $registry = 'dist\portable-win-x64\extensions\registry.json'
+          if (-not (Test-Path $registry)) { throw 'bundled extension store missing from the portable payload' }
+          if (-not (Get-Content $registry -Raw).Contains('pulse.apkinfo')) { throw 'pulse.apkinfo missing from the bundled store registry' }
+          $shotdir = Join-Path $env:GITHUB_WORKSPACE 'shotdir'
+          $host_exe = Join-Path $env:GITHUB_WORKSPACE 'build-ci\pulse.exe'
+          $bundled = Join-Path $env:GITHUB_WORKSPACE 'dist\portable-win-x64\extensions'
+          $launcher = Join-Path $env:GITHUB_WORKSPACE 'dist\portable-win-x64\pulse.exe'
+          # V1: the shipped store loads and renders the card through the real host.
+          $shot1 = Join-Path $env:GITHUB_WORKSPACE 'shots\bundled-store.png'
+          $proc = Start-Process -FilePath $host_exe -Wait -PassThru -NoNewWindow -ArgumentList @('--test-instance', '--extension-store', $bundled, '--shot-quick-preview', '--size', '1000x760', '--shot', $shot1, $shotdir)
+          Write-Output "bundled-store shot exit=$($proc.ExitCode)"
+          if ($proc.ExitCode -ne 0) { throw 'bundled extension store failed to render the apk card' }
+          # V2: the staged launcher advertises the bundled store on its own.
+          $shot2 = Join-Path $env:GITHUB_WORKSPACE 'shots\out-of-box.png'
+          $proc = Start-Process -FilePath $launcher -Wait -PassThru -NoNewWindow -ArgumentList @('--test-instance', '--shot-quick-preview', '--size', '1000x760', '--shot', $shot2, $shotdir)
+          Write-Output "out-of-box launcher shot exit=$($proc.ExitCode)"
+          if ($proc.ExitCode -ne 0) { throw 'staged launcher did not load the bundled extension store' }
+          if (-not (Test-Path $shot2)) { throw 'out-of-box preview shot was not produced' }
+          Write-Output 'bundled apkinfo extension verified: store load + launcher auto-discovery'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: portable-apkinfo-verification
+          path: shots/
+          retention-days: 7
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: Pulse-${{ env.PULSE_VERSION }}-portable-win-x64
