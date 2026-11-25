@@ -7,6 +7,9 @@
 #include <cstdio>
 
 using namespace pulse::app;
+// fs::DirEntry lives in pulse::fs, a sibling of pulse::app; alias it so the
+// helper below can keep the short fs:: spelling at file scope.
+namespace fs = pulse::fs;
 
 namespace {
 
