@@ -4348,6 +4348,18 @@ int ShotModeMain(AppState& state, HWND hwnd) {
         return 2;
     }
     if (ok && (state.shot_hover_preview >= 0 || state.shot_hover_dwell >= 0)) WriteHoverVideoProbe(state, state.shot.output);
+    // The popup snapshot reads only the popup's own D2D target, which cannot
+    // include the docked child panel, so save the card's own frame separately
+    // and report whether that worked next to the timing numbers.
+    bool card_saved = false;
+    if (ok && state.shot_quick_preview && state.quickPreview.visible() &&
+        state.quickPreview.HasNativeModel()) {
+        wchar_t cardPath[MAX_PATH]{};
+        wcsncpy_s(cardPath, state.shot.output.c_str(), _TRUNCATE);
+        if (wchar_t* dot = wcsrchr(cardPath, L'.')) *dot = L'\0';
+        wcscat_s(cardPath, L"-card.png");
+        card_saved = state.quickPreview.SaveModelFrame(cardPath);
+    }
     if (ok) {
         // Drop timing numbers next to the shot for the phase report.
         wchar_t timingPath[MAX_PATH]{};
@@ -4389,6 +4401,8 @@ int ShotModeMain(AppState& state, HWND hwnd) {
                 n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
                     "quick_preview_ready=%d\n",
                     state.quickPreview.visible() && state.quickPreview.HasNativeModel() ? 1 : 0);
+                n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
+                    "card_saved=%d\n", card_saved ? 1 : 0);
             }
             if (n > 0) {
                 DWORD written = 0;
