@@ -88,8 +88,8 @@ int wmain() {
     Check(store.Resolve(Entry(false, L"photo.png")) == std::nullopt, L"wildcard *.jpg rejects png");
     Check(store.Resolve(Entry(false, L"JPG.jpg")) == 0x333333, L"wildcard is case-insensitive");
     store.SetRules({Rule(ColorRuleScope::Both, L"报告?", L"", ColorRuleSize::Any, ColorRuleDate::Any, 0, 0x444444)});
-    Check(store.Resolve(Entry(false, L"报告1.docx")) == 0x444444, L"wildcard ? matches one character");
-    Check(store.Resolve(Entry(false, L"报告12.docx")) == std::nullopt, L"wildcard ? rejects two characters");
+    Check(store.Resolve(Entry(false, L"报告1")) == 0x444444, L"wildcard ? matches one character");
+    Check(store.Resolve(Entry(false, L"报告12")) == std::nullopt, L"wildcard ? rejects two characters");
     store.SetRules({Rule(ColorRuleScope::Both, L"", L"", ColorRuleSize::Any, ColorRuleDate::Any, 0, 0x555555)});
     Check(store.Resolve(Entry(false, L"anything")) == 0x555555, L"empty name condition matches any name");
 
@@ -112,7 +112,7 @@ int wmain() {
     store.SetRules({Rule(ColorRuleScope::Both, L"", L"", ColorRuleSize::M1To10MB, ColorRuleDate::Any, 0, 0x888888)});
     Check(store.Resolve(Entry(false, L"a.bin", 1048576)) == 0x888888, L"1-10 MB accepts the lower bound");
     Check(store.Resolve(Entry(false, L"a.bin", 10485760)) == 0x888888, L"1-10 MB accepts the upper bound");
-    Check(store.Resolve(Entry(false, L"a.bin", 1048577)) == std::nullopt, L"1-10 MB rejects below the range");
+    Check(store.Resolve(Entry(false, L"a.bin", 1048575)) == std::nullopt, L"1-10 MB rejects below the range");
     Check(store.Resolve(Entry(false, L"a.bin", 10485761)) == std::nullopt, L"1-10 MB rejects above the range");
     store.SetRules({Rule(ColorRuleScope::Both, L"", L"", ColorRuleSize::Gt10MB, ColorRuleDate::Any, 0, 0x888888)});
     Check(store.Resolve(Entry(false, L"a.bin", 10485761)) == 0x888888, L"over 10 MB accepts just above");
@@ -159,7 +159,7 @@ int wmain() {
     for (size_t i = 0; i < kMaxColorRules; ++i) Check(store.AddRule(Rule(ColorRuleScope::Both, L"", L"", ColorRuleSize::Any, ColorRuleDate::Any, 0, static_cast<uint32_t>(i))), L"add rule at the cap boundary");
     Check(store.Rules().size() == kMaxColorRules, L"rule list holds the cap");
     Check(!store.AddRule(Rule()), L"add rule beyond the cap is refused");
-    Check(store.RemoveRule(kMaxColorRules), L"remove out of range is refused");
+    Check(!store.RemoveRule(kMaxColorRules), L"remove out of range is refused");
     Check(store.RemoveRule(0), L"remove the first rule");
     Check(store.Rules().size() == kMaxColorRules - 1, L"rule count after removal");
     store.SetRules({Rule(ColorRuleScope::Both, L"a", L"", ColorRuleSize::Any, ColorRuleDate::Any, 0, 0x1),
@@ -190,7 +190,7 @@ int wmain() {
               rules[1].attrs_any == FILE_ATTRIBUTE_HIDDEN && rules[1].color == 0x22C55E,
           L"restored file rule fields");
     Check(restored.Resolve(Entry(true, L"项目A")) == 0xEF4444, L"restored rules resolve");
-    Check(restored.Resolve(Entry(false, L"a.jpg", 2097152, DaysAgo(3), FILE_ATTRIBUTE_HIDDEN)) == 0x22C55E,
+    Check(restored.Resolve(Entry(false, L"a.jpg", 20971520, DaysAgo(3), FILE_ATTRIBUTE_HIDDEN)) == 0x22C55E,
           L"restored rule with several conditions resolves");
 
     // Export and import replace the state.
@@ -203,5 +203,7 @@ int wmain() {
     Check(store.ImportFrom(dir.wstring() + L"\\missing.json") == -1, L"import of a missing file reports malformed");
 
     wprintf(L"\n%d passed, %d failed\n", passed, failed);
+    std::error_code cleanup;
+    std::filesystem::remove_all(dir, cleanup);
     return failed == 0 ? 0 : 1;
 }

@@ -73,34 +73,50 @@ uint32_t DaysOf(ColorRuleDate date) {
     }
 }
 
+// One parser for every rules reader: startup Load, the store-level ImportFrom
+// and the panel's non-committing import all must accept the same format.
+// `array` is the caller-extracted "rules" JSON array; rules append to `out`.
+void AppendRulesFromArray(const std::wstring& text, const std::wstring& array,
+                          std::vector<ColorRule>& out, bool master_default, bool& master) {
+    master = json::ExtractBool(text, L"enabled", master_default);
+    json::ForEachElement(array, [&](const std::wstring& raw) {
+        ColorRule rule;
+        rule.enabled = json::ExtractBool(raw, L"enabled", true);
+        const int scope = json::ExtractInt(raw, L"scope", 2);
+        rule.scope = scope == 0 ? ColorRuleScope::Files
+                                : scope == 1 ? ColorRuleScope::Folders
+                                             : ColorRuleScope::Both;
+        rule.name_wildcard = json::ExtractString(raw, L"name");
+        rule.exts = json::ExtractString(raw, L"exts");
+        const int size = json::ExtractInt(raw, L"size", 0);
+        rule.size = size >= 1 && size <= 6 ? static_cast<ColorRuleSize>(size) : ColorRuleSize::Any;
+        const int date = json::ExtractInt(raw, L"date", 0);
+        rule.date = date >= 1 && date <= 3 ? static_cast<ColorRuleDate>(date) : ColorRuleDate::Any;
+        rule.attrs_any = static_cast<DWORD>(json::ExtractInt(raw, L"attrs", 0)) & 0xFFFFFFFFu;
+        rule.color = static_cast<uint32_t>(json::ExtractInt(raw, L"color", 0)) & 0xFFFFFFu;
+        out.push_back(std::move(rule));
+    });
+    if (out.size() > kMaxColorRules) out.resize(kMaxColorRules);
+}
+
 } // namespace
+
+bool ParseColorRulesFile(const std::wstring& file, std::vector<ColorRule>& rules,
+                         bool master_default, bool& master) {
+    std::wstring text;
+    if (!ReadUtf8File(file, text)) return false;
+    const std::wstring array = json::ExtractArray(text, L"rules");
+    if (array.empty()) return false;
+    AppendRulesFromArray(text, array, rules, master_default, master);
+    return true;
+}
 
 void ColorRuleStore::Load(const std::wstring& file) {
     std::wstring text;
     std::vector<ColorRule> loaded;
     bool master = false;
-    if (ReadUtf8File(file, text)) {
-        master = json::ExtractBool(text, L"enabled", false);
-        const std::wstring array = json::ExtractArray(text, L"rules");
-        json::ForEachElement(array, [&](const std::wstring& raw) {
-            ColorRule rule;
-            rule.enabled = json::ExtractBool(raw, L"enabled", true);
-            const int scope = json::ExtractInt(raw, L"scope", 2);
-            rule.scope = scope == 0 ? ColorRuleScope::Files
-                                    : scope == 1 ? ColorRuleScope::Folders
-                                                : ColorRuleScope::Both;
-            rule.name_wildcard = json::ExtractString(raw, L"name");
-            rule.exts = json::ExtractString(raw, L"exts");
-            const int size = json::ExtractInt(raw, L"size", 0);
-            rule.size = size >= 1 && size <= 6 ? static_cast<ColorRuleSize>(size) : ColorRuleSize::Any;
-            const int date = json::ExtractInt(raw, L"date", 0);
-            rule.date = date >= 1 && date <= 3 ? static_cast<ColorRuleDate>(date) : ColorRuleDate::Any;
-            rule.attrs_any = static_cast<DWORD>(json::ExtractInt(raw, L"attrs", 0)) & 0xFFFFFFFFu;
-            rule.color = static_cast<uint32_t>(json::ExtractInt(raw, L"color", 0)) & 0xFFFFFFu;
-            loaded.push_back(std::move(rule));
-        });
-        if (loaded.size() > kMaxColorRules) loaded.resize(kMaxColorRules);
-    }
+    if (ReadUtf8File(file, text))
+        AppendRulesFromArray(text, json::ExtractArray(text, L"rules"), loaded, false, master);
     std::lock_guard<std::mutex> lock(mu_);
     file_ = file;
     rules_ = std::move(loaded);
@@ -109,9 +125,15 @@ void ColorRuleStore::Load(const std::wstring& file) {
 }
 
 void ColorRuleStore::Save() const {
-    std::lock_guard<std::mutex> lock(mu_);
-    if (file_.empty()) return;
-    WriteUtf8FileAtomic(file_, SerializeLocked());
+    std::wstring file;
+    std::wstring json;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        if (file_.empty()) return;
+        file = file_;
+        json = SerializeLocked();
+    }
+    WriteUtf8FileAtomic(file, json);
 }
 
 void ColorRuleStore::SetMasterEnabled(bool on) {
@@ -190,31 +212,49 @@ void ColorRuleStore::SetRules(std::vector<ColorRule> rules) {
 }
 
 bool ColorRuleStore::AddRule(ColorRule rule) {
-    std::lock_guard<std::mutex> lock(mu_);
-    if (rules_.size() >= kMaxColorRules) return false;
-    rules_.push_back(std::move(rule));
-    RebuildLocked();
-    if (!file_.empty()) WriteUtf8FileAtomic(file_, SerializeLocked());
+    std::wstring file;
+    std::wstring json;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        if (rules_.size() >= kMaxColorRules) return false;
+        rules_.push_back(std::move(rule));
+        RebuildLocked();
+        file = file_;
+        json = SerializeLocked();
+    }
+    if (!file.empty()) WriteUtf8FileAtomic(file, json);
     return true;
 }
 
 bool ColorRuleStore::RemoveRule(size_t index) {
-    std::lock_guard<std::mutex> lock(mu_);
-    if (index >= rules_.size()) return false;
-    rules_.erase(rules_.begin() + static_cast<std::ptrdiff_t>(index));
-    RebuildLocked();
-    if (!file_.empty()) WriteUtf8FileAtomic(file_, SerializeLocked());
+    std::wstring file;
+    std::wstring json;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        if (index >= rules_.size()) return false;
+        rules_.erase(rules_.begin() + static_cast<std::ptrdiff_t>(index));
+        RebuildLocked();
+        file = file_;
+        json = SerializeLocked();
+    }
+    if (!file.empty()) WriteUtf8FileAtomic(file, json);
     return true;
 }
 
 void ColorRuleStore::MoveRule(size_t index, int delta) {
     if (delta == 0) return;
-    std::lock_guard<std::mutex> lock(mu_);
-    const size_t to = static_cast<size_t>(static_cast<int64_t>(index) + delta);
-    if (index >= rules_.size() || to >= rules_.size()) return;
-    std::swap(rules_[index], rules_[to]);
-    RebuildLocked();
-    if (!file_.empty()) WriteUtf8FileAtomic(file_, SerializeLocked());
+    std::wstring file;
+    std::wstring json;
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        const size_t to = static_cast<size_t>(static_cast<int64_t>(index) + delta);
+        if (index >= rules_.size() || to >= rules_.size()) return;
+        std::swap(rules_[index], rules_[to]);
+        RebuildLocked();
+        file = file_;
+        json = SerializeLocked();
+    }
+    if (!file.empty()) WriteUtf8FileAtomic(file, json);
 }
 
 bool ColorRuleStore::ExportTo(const std::wstring& file) const {
@@ -227,35 +267,16 @@ bool ColorRuleStore::ExportTo(const std::wstring& file) const {
 }
 
 int ColorRuleStore::ImportFrom(const std::wstring& file) {
-    std::wstring text;
-    if (!ReadUtf8File(file, text)) return -1;
-    const std::wstring array = json::ExtractArray(text, L"rules");
-    if (array.empty()) return -1;
     std::vector<ColorRule> incoming;
-    json::ForEachElement(array, [&](const std::wstring& raw) {
-        ColorRule rule;
-        rule.enabled = json::ExtractBool(raw, L"enabled", true);
-        const int scope = json::ExtractInt(raw, L"scope", 2);
-        rule.scope = scope == 0 ? ColorRuleScope::Files
-                                : scope == 1 ? ColorRuleScope::Folders
-                                            : ColorRuleScope::Both;
-        rule.name_wildcard = json::ExtractString(raw, L"name");
-        rule.exts = json::ExtractString(raw, L"exts");
-        const int size = json::ExtractInt(raw, L"size", 0);
-        rule.size = size >= 1 && size <= 6 ? static_cast<ColorRuleSize>(size) : ColorRuleSize::Any;
-        const int date = json::ExtractInt(raw, L"date", 0);
-        rule.date = date >= 1 && date <= 3 ? static_cast<ColorRuleDate>(date) : ColorRuleDate::Any;
-        rule.attrs_any = static_cast<DWORD>(json::ExtractInt(raw, L"attrs", 0)) & 0xFFFFFFFFu;
-        rule.color = static_cast<uint32_t>(json::ExtractInt(raw, L"color", 0)) & 0xFFFFFFu;
-        incoming.push_back(std::move(rule));
-    });
-    if (incoming.size() > kMaxColorRules) incoming.resize(kMaxColorRules);
+    bool master = false;
+    if (!ParseColorRulesFile(file, incoming, master_.load(std::memory_order_relaxed), master))
+        return -1;
+    // Capture before the move below: `incoming` is left empty afterwards.
+    const size_t count = incoming.size();
     std::wstring target;
     std::wstring json;
-    bool master = false;
     {
         std::lock_guard<std::mutex> lock(mu_);
-        master = json::ExtractBool(text, L"enabled", master_.load(std::memory_order_relaxed));
         rules_ = std::move(incoming);
         RebuildLocked();
         master_.store(master, std::memory_order_relaxed);
@@ -263,7 +284,6 @@ int ColorRuleStore::ImportFrom(const std::wstring& file) {
         json = SerializeLocked();
     }
     if (!target.empty()) WriteUtf8FileAtomic(target, json);
-    const size_t count = incoming.size();
     return static_cast<int>(count);
 }
 

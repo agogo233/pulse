@@ -64,6 +64,14 @@ inline constexpr uint32_t kColorRulePalette[] = {
 inline constexpr size_t kColorRulePaletteCount = sizeof(kColorRulePalette) / sizeof(kColorRulePalette[0]);
 inline constexpr size_t kMaxColorRules = 100;
 
+// Parses a rules file without touching any store state, so the panel can
+// import into its draft and only persist when the user keeps the edit.
+// Appends to `rules` (pass an empty vector for plain parsing). Returns false
+// when the file cannot be read or has no rules array. `master_default` is the
+// master-switch value when the file carries none.
+bool ParseColorRulesFile(const std::wstring& file, std::vector<ColorRule>& rules,
+                         bool master_default, bool& master);
+
 class ColorRuleStore {
 public:
     // Public so the tests can keep a second instance; the app uses Instance().
