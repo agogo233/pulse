@@ -130,8 +130,8 @@ jobs:
             @{ name = 'dark';   args = @('--shot-details', '--size', '1000x760', '--dark') },
             @{ name = 'narrow'; args = @('--shot-details', '--size', '420x760') },
             @{ name = 'hover';  args = @('--shot-hover-preview', '0') },
-            @{ name = 'preview';      args = @('--shot-quick-preview', '--size', '1000x760') },
-            @{ name = 'preview-dark'; args = @('--shot-quick-preview', '--size', '1000x760', '--dark') }
+            @{ name = 'preview';      card = $true; args = @('--shot-quick-preview', '--size', '1000x760') },
+            @{ name = 'preview-dark'; card = $true; args = @('--shot-quick-preview', '--size', '1000x760', '--dark') }
           )
           foreach ($variant in $variants) {
             $out = Join-Path $env:GITHUB_WORKSPACE "shots\$($variant.name).png"
@@ -150,6 +150,25 @@ jobs:
               throw "shot $($variant.name) exited with $($proc.ExitCode)"
             }
             if ((Get-Item $out).Length -lt 10KB) { throw "shot $($variant.name) is suspiciously small" }
+            if ($variant.card) {
+              # A nonzero exit and a large PNG do not prove the extension card
+              # rendered: the host silently falls back to built-in previews.
+              # The card frame and the shot sidecar carry that proof.
+              $stem = $out -replace '\.png$', ''
+              $card = "$stem-card.png"
+              $timing = "$stem.timing.txt"
+              if (-not (Test-Path $card) -or (Get-Item $card).Length -lt 1KB) {
+                throw "shot $($variant.name) did not save the extension card frame"
+              }
+              if (-not (Test-Path $timing)) { throw "shot $($variant.name) timing sidecar missing" }
+              $probe = Get-Content $timing -Raw
+              if (-not $probe.Contains('quick_preview_ready=1')) {
+                throw "shot $($variant.name) quick preview never became ready"
+              }
+              if (-not $probe.Contains('card_saved=1')) {
+                throw "shot $($variant.name) card frame save failed"
+              }
+            }
           }
       - uses: actions/upload-artifact@v4
         with:

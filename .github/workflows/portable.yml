@@ -59,6 +59,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'apkinfo configure failed' }
           cmake --build build-apkinfo --parallel
           if ($LASTEXITCODE -ne 0) { throw 'apkinfo build failed' }
+      - name: Build and run color-rule tests
+        # No workflow runs the pulse C++ test suite; this exercises the one
+        # covering the 按规则上色 store (matching, cap, JSON round trip).
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake --build build-ci --target pulse_color_rule_test
+          if ($LASTEXITCODE -ne 0) { throw 'color-rule test build failed' }
+          & (Join-Path $env:GITHUB_WORKSPACE 'build-ci\pulse_color_rule_test.exe')
+          if ($LASTEXITCODE -ne 0) { throw 'color-rule tests failed' }
       - name: Stage portable payload
         shell: pwsh
         run: |
