@@ -41,21 +41,24 @@ Status Open(const std::wstring& path, Archive& out) {
     auto* zip = new (std::nothrow) mz_zip_archive{};
     if (!zip) return Status::OpenFailed;
     out.handle = zip;
+    // Funnel every failure through Close so a failed open leaves out empty
+    // instead of leaking the archive (and, once init succeeded, the file).
+    auto fail = [&](Status status) { Close(out); return status; };
     std::string narrow;
     try {
         narrow = Narrow(Conventional(path));
     } catch (...) {
-        return Status::OpenFailed;
+        return fail(Status::OpenFailed);
     }
-    if (!mz_zip_reader_init_file(zip, narrow.c_str(), 0)) return Status::OpenFailed;
+    if (!mz_zip_reader_init_file(zip, narrow.c_str(), 0)) return fail(Status::OpenFailed);
     const mz_uint count = mz_zip_reader_get_num_files(zip);
-    if (count > kMaxEntries) return Status::OpenFailed;
+    if (count > kMaxEntries) return fail(Status::OpenFailed);
     out.entry_count = static_cast<uint32_t>(count);
     for (mz_uint i = 0; i < count; ++i) {
         mz_zip_archive_file_stat stat{};
-        if (!mz_zip_reader_file_stat(zip, i, &stat)) return Status::OpenFailed;
+        if (!mz_zip_reader_file_stat(zip, i, &stat)) return fail(Status::OpenFailed);
         out.uncompressed_total += stat.m_uncomp_size;
-        if (out.uncompressed_total > kMaxUncompressedTotal) return Status::OpenFailed;
+        if (out.uncompressed_total > kMaxUncompressedTotal) return fail(Status::OpenFailed);
     }
     return Status::Ok;
 }
