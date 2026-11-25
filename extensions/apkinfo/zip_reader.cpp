@@ -24,6 +24,16 @@ std::string Narrow(const std::wstring& path) {
         static_cast<int>(path.size()), result.data(), count, nullptr, nullptr);
     return result;
 }
+
+// The host hands item paths in extended-length (\\?\) form. miniz opens through
+// the CRT, which does not understand that prefix, so drop it (and turn a
+// \\?\UNC\ share back into \\) before the narrow conversion. Plain paths and
+// the relative paths used by the test pass through untouched.
+std::wstring Conventional(const std::wstring& path) {
+    if (path.starts_with(L"\\\\?\\UNC\\")) return L"\\\\" + path.substr(8);
+    if (path.starts_with(L"\\\\?\\")) return path.substr(4);
+    return path;
+}
 } // namespace
 
 Status Open(const std::wstring& path, Archive& out) {
@@ -33,7 +43,7 @@ Status Open(const std::wstring& path, Archive& out) {
     out.handle = zip;
     std::string narrow;
     try {
-        narrow = Narrow(path);
+        narrow = Narrow(Conventional(path));
     } catch (...) {
         return Status::OpenFailed;
     }
