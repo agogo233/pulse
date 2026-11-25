@@ -4375,12 +4375,16 @@ int ShotModeMain(AppState& state, HWND hwnd) {
                 state.timing.first_frame_ms, state.timing.sort_done_ms);
             if (state.shot_quick_preview && n > 0 && n < static_cast<int>(sizeof(buf))) {
                 // Diagnose why the extension card did (not) land: popup state,
-                // store contents and per-package session status.
-                n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
-                    "quick_preview_visible=%d\n", state.quickPreview.visible() ? 1 : 0);
+                // store contents and per-package session status. A truncated
+                // snprintf reports the would-be length, so n may run past buf
+                // between appends; guard every append and clamp the write.
+                if (n >= 0 && n < static_cast<int>(sizeof(buf)))
+                    n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
+                        "quick_preview_visible=%d\n", state.quickPreview.visible() ? 1 : 0);
                 const size_t packages = pulse::extensions::PackageCount();
-                n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
-                    "packages=%zu\n", packages);
+                if (n >= 0 && n < static_cast<int>(sizeof(buf)))
+                    n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
+                        "packages=%zu\n", packages);
                 // POD only: this function hosts __try and must not require
                 // object unwinding (MSVC C2712).
                 wchar_t probe[MAX_PATH]{};
@@ -4390,23 +4394,30 @@ int ShotModeMain(AppState& state, HWND hwnd) {
                 } else {
                     wcscpy_s(probe, L"C:\\pulse_probe.apk");
                 }
-                n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
-                    "provider_available=%d\n",
-                    QuickPreviewProviderProbe(state.hwnd, probe));
+                if (n >= 0 && n < static_cast<int>(sizeof(buf)))
+                    n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
+                        "provider_available=%d\n",
+                        QuickPreviewProviderProbe(state.hwnd, probe));
                 for (size_t package = 0; package < packages && n < static_cast<int>(sizeof(buf)) - 96; ++package)
                     n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
                         "pkg%zu_enabled=%d status=0x%lX\n", package,
                         pulse::extensions::PackageEnabled(package) ? 1 : 0,
                         static_cast<unsigned long>(pulse::extensions::native::PackageLastStatus(state.hwnd, package)));
-                n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
-                    "quick_preview_ready=%d\n",
-                    state.quickPreview.visible() && state.quickPreview.HasNativeModel() ? 1 : 0);
-                n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
-                    "card_saved=%d\n", card_saved ? 1 : 0);
+                if (n >= 0 && n < static_cast<int>(sizeof(buf)))
+                    n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
+                        "quick_preview_ready=%d\n",
+                        state.quickPreview.visible() && state.quickPreview.HasNativeModel() ? 1 : 0);
+                if (n >= 0 && n < static_cast<int>(sizeof(buf)))
+                    n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
+                        "card_saved=%d\n", card_saved ? 1 : 0);
             }
             if (n > 0) {
                 DWORD written = 0;
-                WriteFile(f, buf, (DWORD)n, &written, nullptr);
+                // n may exceed buf after a truncated append; clamp to the
+                // bytes actually written so WriteFile never reads out of range.
+                const DWORD len = n > static_cast<int>(sizeof(buf))
+                    ? static_cast<DWORD>(sizeof(buf)) : static_cast<DWORD>(n);
+                WriteFile(f, buf, len, &written, nullptr);
             }
             CloseHandle(f);
         }
