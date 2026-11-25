@@ -127,7 +127,9 @@ jobs:
             @{ name = 'light';  args = @('--shot-details', '--size', '1000x760') },
             @{ name = 'dark';   args = @('--shot-details', '--size', '1000x760', '--dark') },
             @{ name = 'narrow'; args = @('--shot-details', '--size', '420x760') },
-            @{ name = 'hover';  args = @('--shot-hover-preview', '0') }
+            @{ name = 'hover';  args = @('--shot-hover-preview', '0') },
+            @{ name = 'preview';      args = @('--shot-quick-preview', '--size', '1000x760') },
+            @{ name = 'preview-dark'; args = @('--shot-quick-preview', '--size', '1000x760', '--dark') }
           )
           foreach ($variant in $variants) {
             $out = Join-Path $env:GITHUB_WORKSPACE "shots\$($variant.name).png"

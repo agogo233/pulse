@@ -4252,7 +4252,7 @@ int ShotModeMain(AppState& state, HWND hwnd) {
         WaitForShotReady(state);
         StageTagShotStates(state);
         StageSplitShot(state);
-        if (state.shot_details && state.pane && state.pane->ActiveTab() &&
+        if ((state.shot_details || state.shot_quick_preview) && state.pane && state.pane->ActiveTab() &&
             state.pane->ActiveTab()->snapshot &&
             !state.pane->ActiveTab()->snapshot->empty()) {
             // Select rows after enumeration so the panel has deterministic data.
@@ -4264,9 +4264,24 @@ int ShotModeMain(AppState& state, HWND hwnd) {
             }
         }
         MSG msg{};
-        // Details shots include extension preview cards, which arrive through
-        // the async preview pipeline; give them extra frames to land.
-        const int pump_frames = state.shot_details ? 60 : 20;
+        if (state.shot_quick_preview) {
+            // Open the quick preview over row 0; the extension's UI-model card
+            // arrives through the async preview pipeline, so wait for it.
+            ToggleQuickPreview(state);
+            for (int i = 0; i < 100 && !(state.quickPreview.visible() &&
+                                        state.quickPreview.HasNativeModel()); ++i) {
+                while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+                Sleep(50);
+            }
+            for (int i = 0; i < 10; ++i) { // let the open animation settle
+                Render(state);
+                Sleep(30);
+            }
+        }
+        const int pump_frames = state.shot_details || state.shot_quick_preview ? 60 : 20;
         for (int i = 0; i < pump_frames; ++i) {
             while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
                 TranslateMessage(&msg);
@@ -4314,7 +4329,9 @@ int ShotModeMain(AppState& state, HWND hwnd) {
             }
         }
         Render(state);
-        ok = state.compositor.SaveSnapshot(state.shot.output.c_str());
+        ok = state.shot_quick_preview && state.quickPreview.visible()
+                 ? state.quickPreview.SaveShot(state.shot.output.c_str())
+                 : state.compositor.SaveSnapshot(state.shot.output.c_str());
     } __except (pulse::crash::ReportFatal(GetExceptionInformation(), "shot")) {
         return 2;
     }
@@ -4332,6 +4349,10 @@ int ShotModeMain(AppState& state, HWND hwnd) {
                 "path=%ls\nfirst_frame_ms=%.2f\nenum_sort_done_ms=%.2f\n",
                 state.pane && state.pane->ActiveTab() ? state.pane->ActiveTab()->current_path.c_str() : L"",
                 state.timing.first_frame_ms, state.timing.sort_done_ms);
+            if (state.shot_quick_preview && n > 0 && n < static_cast<int>(sizeof(buf)))
+                n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
+                    "quick_preview_ready=%d\n",
+                    state.quickPreview.visible() && state.quickPreview.HasNativeModel() ? 1 : 0);
             if (n > 0) {
                 DWORD written = 0;
                 WriteFile(f, buf, (DWORD)n, &written, nullptr);
@@ -4788,6 +4809,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
         } else if (wcscmp(__wargv[i], L"--shot-details-multi") == 0) {
             state.shot_details = true;
             state.shot_details_multi = true;
+        } else if (wcscmp(__wargv[i], L"--shot-quick-preview") == 0) {
+            state.shot_quick_preview = true;
         } else if (wcscmp(__wargv[i], L"--shot-scale") == 0 && i + 1 < __argc) {
             state.shot_scale_override = std::clamp(
                 static_cast<float>(_wtof(__wargv[++i])), 1.0f, 2.5f);

@@ -78,6 +78,10 @@ public:
     void Close();
     bool visible() const noexcept;
     HWND hwnd() const noexcept { return hwnd_; }
+    // Headless capture support (--shot-quick-preview): is a native extension
+    // UI-model card loaded, and snapshot this popup itself to a PNG.
+    bool HasNativeModel() const noexcept { return native_kind_ == NativeKind::Model && native_preview_.HasResult(); }
+    bool SaveShot(const wchar_t* path) { Render(); return compositor_.SaveSnapshot(path); }
     const QuickPreviewItem& item() const noexcept { return item_; }
     bool TakeCommand(UINT_PTR token, QuickPreviewCommand& command) { return commands_.Take(token, command); }
     // Path chosen inside a folder listing, handed over once with open_message_.

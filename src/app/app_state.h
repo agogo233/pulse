@@ -555,6 +555,9 @@ struct AppState : AppCoreOwner {
     int shot_hover_dwell = -1;   // --shot-hover-dwell N: dwell line on the Nth file
     int shot_group = 0;   // --shot-group N: group the shot folder (1 name .. 6 location)
     bool shot_details_multi = false;
+    // --shot-quick-preview: open the quick preview popup over row 0 and
+    // snapshot the popup itself (where extension preview cards render).
+    bool shot_quick_preview = false;
     float shot_scale_override = 0.0f;
     bool shot_high_contrast = false;
 
