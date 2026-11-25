@@ -2,6 +2,7 @@
 #pragma once
 #include "apk_info.h"
 #include "pulse/ui_model.h"
+#include <deque>
 #include <string>
 #include <vector>
 
@@ -22,8 +23,12 @@ private:
     };
     void Reserve(size_t extra);
     Owned& Make(const std::string& text);
+    // Node IDs must be unique across the whole tree (the host rejects
+    // duplicates), so generated cells get indexed ids backed by this store.
+    const char* MakeId(std::string id);
     const apk_info::Info& info_;
     std::vector<Owned> strings_;      // stable backing store for node text
+    std::deque<std::string> ids_;     // stable backing store for node ids
     std::vector<PulseUiModelNode> nodes_;
     std::vector<PulseUiModelNode> meta_children_;
     std::vector<PulseUiModelNode> tag_children_;

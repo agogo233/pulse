@@ -4,12 +4,14 @@
 // The fixture directory is produced by test_data/make_fixtures.py.
 #include "apk_info.h"
 #include "axml_parser.h"
+#include "info_model.h"
 #include "text.h"
 #include "zip_reader.h"
 #include <windows.h>
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -169,9 +171,17 @@ void TestText() {
         "api level format substitutes");
 }
 
+void CollectIds(const PulseUiModelNode& node, std::set<std::string>& ids, size_t& count) {
+    ++count;
+    ids.emplace(node.id.data, node.id.length);
+    if (node.children.present)
+        for (uint32_t i = 0; i < node.children.count; ++i)
+            CollectIds(node.children.data[i], ids, count);
+}
+
 void TestInfoModel(const std::filesystem::path& dir) {
     // The model builder is exercised through the plugin publish path on the
-    // host; here only the pure builder stays testable without the SDK.
+    // host; here the pure builder is checked against the host's tree rules.
     apk_info::Info info;
     if (apk_info::Load(Fixture(dir, "utf8.apk"), {}, info) != apk_info::Status::Ok) {
         Check(false, "info model fixture loads");
@@ -179,6 +189,20 @@ void TestInfoModel(const std::filesystem::path& dir) {
     }
     Check(info.package.size() + info.label.size() > 0, "info model has title source");
     Check(info.permissions.size() <= 256, "info permissions within parse cap");
+    info_model::Card card(info);
+    const PulseUiModelTree* tree = card.Build();
+    Check(tree && tree->root, "card builds a model tree");
+    if (tree && tree->root) {
+        // The host's ParseUiTree rejects duplicate node ids across the tree
+        // with PULSE_ERROR_ARGUMENT, which surfaced as an unreadable preview.
+        std::set<std::string> ids;
+        size_t nodes = 0;
+        CollectIds(*tree->root, ids, nodes);
+        Check(nodes == ids.size(), "card node ids are unique across the tree");
+        Check(nodes <= 128, "card stays within the 128-node budget");
+        Check(tree->root->type == PULSE_UI_MODEL_STACK, "card root is a stack");
+        Check(tree->command_count == 0, "preview model declares no commands");
+    }
 }
 } // namespace
 

@@ -42,6 +42,11 @@ Card::Owned& Card::Make(const std::string& text) {
     return strings_.back();
 }
 
+const char* Card::MakeId(std::string id) {
+    ids_.push_back(std::move(id));
+    return ids_.back().c_str();
+}
+
 const PulseUiModelTree* Card::Build() {
     nodes_.clear();
     meta_children_.clear();
@@ -55,12 +60,17 @@ const PulseUiModelTree* Card::Build() {
     nodes_.push_back(package_);
     divider1_ = Leaf(PULSE_UI_MODEL_DIVIDER, "divider-1");
     nodes_.push_back(divider1_);
-    // Two-column facts.
+    // Two-column facts. Each cell needs its own node id: the host rejects
+    // duplicate ids across the tree.
     const auto add_meta = [this](const std::string& label, const std::string& value) {
-        PulseUiModelNode cell = Leaf(PULSE_UI_MODEL_TEXT, "m");
+        const size_t index = meta_children_.size() / 2;
+        char name[16];
+        std::snprintf(name, sizeof(name), "m%zu", index);
+        PulseUiModelNode cell = Leaf(PULSE_UI_MODEL_TEXT, MakeId(name));
         cell.text = Make(label).field;
         meta_children_.push_back(cell);
-        cell = Leaf(PULSE_UI_MODEL_TEXT, "v");
+        std::snprintf(name, sizeof(name), "v%zu", index);
+        cell = Leaf(PULSE_UI_MODEL_TEXT, MakeId(name));
         cell.text = Make(value).field;
         meta_children_.push_back(cell);
     };
@@ -95,12 +105,14 @@ const PulseUiModelTree* Card::Build() {
     nodes_.push_back(permissions_);
     const size_t shown = std::min<size_t>(info_.permissions.size(), kMaxPermissionTags);
     for (size_t i = 0; i < shown; ++i) {
-        PulseUiModelNode tag = Leaf(PULSE_UI_MODEL_TAG, "perm");
+        char name[16];
+        std::snprintf(name, sizeof(name), "perm%zu", i);
+        PulseUiModelNode tag = Leaf(PULSE_UI_MODEL_TAG, MakeId(name));
         tag.text = Make(info_.permissions[i]).field;
         tag_children_.push_back(tag);
     }
     if (info_.permissions.size() > shown) {
-        PulseUiModelNode tag = Leaf(PULSE_UI_MODEL_TAG, "perm-more");
+        PulseUiModelNode tag = Leaf(PULSE_UI_MODEL_TAG, MakeId("perm-more"));
         tag.text = Make(text::Format(text::Id::More,
             std::to_string(info_.permissions.size() - shown))).field;
         tag_children_.push_back(tag);

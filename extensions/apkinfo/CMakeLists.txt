@@ -30,8 +30,8 @@ target_link_libraries(pulse_apkinfo PRIVATE miniz_vendor)
 
 option(PULSE_APKINFO_TESTS "Build the APK info parser tests" ON)
 if(PULSE_APKINFO_TESTS)
-    add_executable(pulse_apkinfo_test apkinfo_test.cpp axml_parser.cpp zip_reader.cpp apk_info.cpp text.cpp)
-    set_source_files_properties(apkinfo_test.cpp apk_info.cpp zip_reader.cpp axml_parser.cpp text.cpp
+    add_executable(pulse_apkinfo_test apkinfo_test.cpp axml_parser.cpp zip_reader.cpp apk_info.cpp info_model.cpp text.cpp)
+    set_source_files_properties(apkinfo_test.cpp apk_info.cpp zip_reader.cpp axml_parser.cpp info_model.cpp text.cpp
         PROPERTIES OBJECT_DEPENDS "${PULSE_PUBLIC_HEADERS}")
     target_include_directories(pulse_apkinfo_test PRIVATE "${PULSE_SDK_INCLUDE}")
     target_compile_features(pulse_apkinfo_test PRIVATE cxx_std_20)
