@@ -4257,29 +4257,6 @@ __declspec(noinline) static int QuickPreviewProviderProbe(HWND owner, const wcha
     return pulse::extensions::native::PreviewsAdapter::Available(owner, path) ? 1 : 0;
 }
 
-// Runs the host's real preview pipeline (plugin Load -> publish -> model
-// conversion) for the probe path and returns the terminal PulseStatus, so the
-// shot sidecar shows whether the extension actually produced a model, not just
-// that a provider matched. 0xFFFFFFFF means the worker was still pending.
-// noinline: Request takes a std::wstring and would otherwise materialize a
-// temporary in ShotModeMain's SEH frame (MSVC C2712).
-__declspec(noinline) static unsigned QuickPreviewRequestProbe(AppState& state, const wchar_t* probe) {
-    using namespace pulse::extensions::native;
-    constexpr unsigned kPending = 0xFFFFFFFFu;
-    const uint64_t surface = 0x7FFF0001;
-    const auto path = std::wstring(probe);
-    unsigned result = kPending;
-    for (int i = 0; i < 100; ++i) {
-        const auto response = PreviewsAdapter::Request(state.hwnd, path, 0, 0, 1, surface, nullptr);
-        if (response.status == PreviewStatus::Ready) { result = PULSE_OK; break; }
-        if (response.status == PreviewStatus::Failed) { result = static_cast<unsigned>(response.error); break; }
-        if (response.status == PreviewStatus::Unavailable) { result = static_cast<unsigned>(PULSE_ERROR_UNAVAILABLE); break; }
-        ::Sleep(20);
-    }
-    PreviewsAdapter::Cancel(state.hwnd, surface);
-    return result;
-}
-
 int ShotModeMain(AppState& state, HWND hwnd) {
     bool ok = false;
     __try {
@@ -4404,9 +4381,6 @@ int ShotModeMain(AppState& state, HWND hwnd) {
                 n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
                     "provider_available=%d\n",
                     QuickPreviewProviderProbe(state.hwnd, probe));
-                n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
-                    "provider_request=0x%lX\n",
-                    static_cast<unsigned long>(QuickPreviewRequestProbe(state, probe)));
                 for (size_t package = 0; package < packages && n < static_cast<int>(sizeof(buf)) - 96; ++package)
                     n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
                         "pkg%zu_enabled=%d status=0x%lX\n", package,
