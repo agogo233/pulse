@@ -207,6 +207,7 @@ namespace pulse::app { bool RunMediaColumnResizeCapture(); }
 #include "cloud_download.h"
 #include "extensions/runtime.h"
 #include "extensions/native/session.h"
+#include "extensions/native/previews_adapter.h"
 
 namespace {
 // Default-program changes (thumbnail "opens with" badges): one shell-level
@@ -4269,6 +4270,7 @@ int ShotModeMain(AppState& state, HWND hwnd) {
         if (state.shot_quick_preview) {
             // Open the quick preview over row 0; the extension's UI-model card
             // arrives through the async preview pipeline, so wait for it.
+            pulse::extensions::native::PrepareCommandPackages(state);
             ToggleQuickPreview(state);
             for (int i = 0; i < 100 && !(state.quickPreview.visible() &&
                                         state.quickPreview.HasNativeModel()); ++i) {
@@ -4359,6 +4361,13 @@ int ShotModeMain(AppState& state, HWND hwnd) {
                 const size_t packages = pulse::extensions::PackageCount();
                 n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
                     "packages=%zu\n", packages);
+                const std::wstring probe = state.pane && state.pane->ActiveTab() &&
+                                                   !state.pane->ActiveTab()->current_path.empty()
+                                               ? state.pane->ActiveTab()->current_path + L"\\utf8.apk"
+                                               : std::wstring(L"C:\\pulse_probe.apk");
+                n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
+                    "provider_available=%d\n",
+                    pulse::extensions::native::PreviewsAdapter::Available(state.hwnd, probe) ? 1 : 0);
                 for (size_t package = 0; package < packages && n < static_cast<int>(sizeof(buf)) - 96; ++package)
                     n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
                         "pkg%zu_enabled=%d status=0x%lX\n", package,
