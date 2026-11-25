@@ -27,7 +27,9 @@ private:
     // duplicates), so generated cells get indexed ids backed by this store.
     const char* MakeId(std::string id);
     const apk_info::Info& info_;
-    std::vector<Owned> strings_;      // stable backing store for node text
+    // deque (like ids_): references into existing elements survive later
+    // pushes, so borrowed node text can never dangle on growth.
+    std::deque<Owned> strings_;      // stable backing store for node text
     std::deque<std::string> ids_;     // stable backing store for node ids
     std::vector<PulseUiModelNode> nodes_;
     std::vector<PulseUiModelNode> meta_children_;

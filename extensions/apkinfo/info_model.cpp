@@ -30,9 +30,9 @@ Card::Card(const apk_info::Info& info) : info_(info) {
 }
 
 void Card::Reserve(size_t extra) {
-    strings_.reserve(extra);
+    // strings_ is a deque: references are stable without reserving capacity.
     nodes_.reserve(extra);
-    meta_children_.reserve(kMetaRows);
+    meta_children_.reserve(kMetaRows * 2);
     tag_children_.reserve(kMaxPermissionTags + 1);
 }
 

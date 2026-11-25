@@ -31,6 +31,14 @@ void TestZipReader(const std::filesystem::path& dir) {
     zip_reader::Archive archive;
     Check(zip_reader::Open(Fixture(dir, "utf8.apk"), archive) == zip_reader::Status::Ok,
         "zip opens the synthetic apk");
+    // The host hands extensions \\?\-prefixed paths; the reader must strip the
+    // prefix before the CRT's narrow conversion accepts it.
+    const std::wstring extended =
+        L"\\\\?\\" + std::filesystem::absolute(dir / "utf8.apk").wstring();
+    zip_reader::Archive extended_archive;
+    Check(zip_reader::Open(extended, extended_archive) == zip_reader::Status::Ok,
+        "extended-length (\\\\?\\) path opens after prefix strip");
+    zip_reader::Close(extended_archive);
     Check(archive.entry_count == 5, "entry count matches the fixture");
     std::vector<uint8_t> manifest;
     Check(zip_reader::Extract(archive, "AndroidManifest.xml", 1 << 20, manifest) ==
@@ -66,7 +74,10 @@ void TestAxmlUtf8(const std::filesystem::path& dir) {
     axml::Document document;
     std::string error;
     Check(axml::Parse(bytes.data(), bytes.size(), document, error), "utf8 axml parses");
-    if (document.manifest.name.empty()) return;
+    if (document.manifest.name.empty()) {
+        Check(false, "utf8 manifest element carries a name");
+        return;
+    }
     const auto* package = document.manifest.Find("package");
     Check(package && package->value == "com.pulse.filemanager", "package attribute read");
     const auto* version = document.manifest.Find("android:versionName");
@@ -129,6 +140,33 @@ void TestAxmlHostile() {
     const uint8_t truncated[] = {0x03, 0x00, 0x08, 0x00, 0x40, 0x00, 0x00, 0x00};
     Check(!axml::Parse(truncated, sizeof(truncated), document, error),
         "truncated file header refused");
+    // Regression: a UTF-16 length varint may straddle the pool chunk's end
+    // (its continuation unit doubles as the next chunk's type field). The
+    // decode must refuse a cursor past chunk_end instead of wrapping the
+    // byte budget around and walking off the buffer.
+    const uint8_t straddled[] = {
+        0x03, 0x00, 0x08, 0x00, 0x4E, 0x00, 0x00, 0x00,  // file header, size 78
+        0x01, 0x00, 0x1C, 0x00, 0x22, 0x00, 0x00, 0x00,  // pool chunk, size 34
+        0x01, 0x00, 0x00, 0x00,                          // string count 1
+        0x00, 0x00, 0x00, 0x00,                          // style count 0
+        0x00, 0x00, 0x00, 0x00,                          // flags: UTF-16
+        0x20, 0x00, 0x00, 0x00,                          // strings start 32
+        0x20, 0x00, 0x00, 0x00,                          // styles start (unused)
+        0x00, 0x00, 0x00, 0x00,                          // offsets[0] = 0
+        0x03, 0x80,                                      // varint unit 1: continue, 3 units
+        0x02, 0x01, 0x10, 0x00, 0x24, 0x00, 0x00, 0x00,  // start element: the type
+                                                        // field is the varint's
+                                                        // continuation, past the
+                                                        // pool chunk end
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // line, comment
+        0xFF, 0xFF, 0xFF, 0xFF,                          // ns = no entry
+        0x00, 0x00, 0x00, 0x00,                          // name index 0 -> pool.Get
+        0x14, 0x00, 0x14, 0x00, 0x00, 0x00,              // attr start/size/count
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00,              // id/class/style
+    };
+    Check(!axml::Parse(straddled, sizeof(straddled), document, error) &&
+              document.manifest.name.empty(),
+        "length varint straddling the pool chunk end is refused");
 }
 
 void TestApkInfo(const std::filesystem::path& dir) {

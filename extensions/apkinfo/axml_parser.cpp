@@ -74,13 +74,18 @@ struct StringPool {
             uint32_t utf16_length = 0, byte_length = 0;
             if (!DecodeLengthUtf8(reader, cursor, utf16_length, cursor)) return false;
             if (!DecodeLengthUtf8(reader, cursor, byte_length, cursor)) return false;
+            // Chunk-bounded first: `chunk_end - cursor` must not underflow, and
+            // a string may not spill out of its pool chunk.
+            if (cursor > chunk_end || byte_length > chunk_end - cursor) return false;
             if (!reader.CanRead(cursor, byte_length)) return false;
             value.assign(reinterpret_cast<const char*>(reader.At(cursor)), byte_length);
             return true;
         }
         uint32_t units = 0;
         if (!DecodeLengthUtf16(reader, cursor, units, cursor)) return false;
-        if (units > (chunk_end - cursor) / 2) return false;
+        // Same underflow guard: the length varint can leave cursor past the
+        // chunk end, and `chunk_end - cursor` would wrap to a huge bound.
+        if (cursor > chunk_end || units > (chunk_end - cursor) / 2) return false;
         value.clear();
         value.reserve(units);
         for (uint32_t i = 0; i < units; ++i) {
