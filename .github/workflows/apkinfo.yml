@@ -117,6 +117,10 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $pulse = Join-Path $env:GITHUB_WORKSPACE 'build-ci\pulse.exe'
+          if (-not (Test-Path $pulse)) { throw "pulse.exe not found at $pulse" }
+          Write-Output "build-ci DLLs:"
+          Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE 'build-ci') -Filter *.dll |
+            Select-Object -ExpandProperty Name
           $shotdir = Join-Path $env:GITHUB_WORKSPACE 'shotdir'
           New-Item -ItemType Directory -Path shots -Force | Out-Null
           $variants = @(
@@ -128,8 +132,19 @@ jobs:
           foreach ($variant in $variants) {
             $out = Join-Path $env:GITHUB_WORKSPACE "shots\$($variant.name).png"
             $argList = @('--test-instance', '--extension-store', $env:PULSE_APKINFO_STORE) + $variant.args + @('--shot', $out, $shotdir)
-            & $pulse @argList
-            if ($LASTEXITCODE -ne 0) { throw "shot $($variant.name) exited with $LASTEXITCODE" }
+            # Start-Process gives a definite ExitCode (the previous `& $pulse`
+            # invocation failed with an unset $LASTEXITCODE) and captures the
+            # app's own diagnostics next to the runner log.
+            $stdout = Join-Path $env:RUNNER_TEMP "$($variant.name).out.log"
+            $stderr = Join-Path $env:RUNNER_TEMP "$($variant.name).err.log"
+            $proc = Start-Process -FilePath $pulse -ArgumentList $argList -Wait -PassThru `
+              -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+            Write-Output "shot $($variant.name): exit=$($proc.ExitCode) hex=0x$('{0:X}' -f $proc.ExitCode)"
+            if ($proc.ExitCode -ne 0) {
+              Get-Content $stdout -ErrorAction SilentlyContinue | Select-Object -Last 20
+              Get-Content $stderr -ErrorAction SilentlyContinue | Select-Object -Last 20
+              throw "shot $($variant.name) exited with $($proc.ExitCode)"
+            }
             if ((Get-Item $out).Length -lt 10KB) { throw "shot $($variant.name) is suspiciously small" }
           }
       - uses: actions/upload-artifact@v4
