@@ -3,6 +3,10 @@ project(PulseApkInfo LANGUAGES C CXX)
 # The Pulse APK Info extension. Build in an x64 MSVC environment:
 #   cmake -S extensions/apkinfo -B build-extensions/apkinfo -G Ninja
 #   cmake --build build-extensions/apkinfo
+# Static CRT like the host (built with MultiThreaded): the package DLL must
+# load on machines without the VC++ redistributable, and the plugin ABI is a
+# plain C surface, so no CRT state crosses the boundary.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 set(PULSE_SDK_INCLUDE "${CMAKE_CURRENT_LIST_DIR}/../../sdk/native/include" CACHE PATH "Public SDK headers")
 
 file(GLOB PULSE_PUBLIC_HEADERS CONFIGURE_DEPENDS "${PULSE_SDK_INCLUDE}/pulse/*.h" "${PULSE_SDK_INCLUDE}/pulse/*.hpp")
