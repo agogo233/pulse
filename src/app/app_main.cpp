@@ -4361,10 +4361,15 @@ int ShotModeMain(AppState& state, HWND hwnd) {
                 const size_t packages = pulse::extensions::PackageCount();
                 n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
                     "packages=%zu\n", packages);
-                const std::wstring probe = state.pane && state.pane->ActiveTab() &&
-                                                   !state.pane->ActiveTab()->current_path.empty()
-                                               ? state.pane->ActiveTab()->current_path + L"\\utf8.apk"
-                                               : std::wstring(L"C:\\pulse_probe.apk");
+                // POD only: this function hosts __try and must not require
+                // object unwinding (MSVC C2712).
+                wchar_t probe[MAX_PATH]{};
+                if (state.pane && state.pane->ActiveTab() && !state.pane->ActiveTab()->current_path.empty()) {
+                    wcsncpy_s(probe, state.pane->ActiveTab()->current_path.c_str(), _TRUNCATE);
+                    wcscat_s(probe, L"\\utf8.apk");
+                } else {
+                    wcscpy_s(probe, L"C:\\pulse_probe.apk");
+                }
                 n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
                     "provider_available=%d\n",
                     pulse::extensions::native::PreviewsAdapter::Available(state.hwnd, probe) ? 1 : 0);
