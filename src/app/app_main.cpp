@@ -4249,6 +4249,14 @@ static void StageLinkPillShot(AppState& state) {
     }
 }
 
+// PreviewsAdapter::Available takes const std::wstring&, so a POD path buffer
+// would materialize a std::wstring temporary in this TU. Keep that conversion
+// in a frame without __try: ShotModeMain hosts SEH and must stay free of
+// objects with destructors (MSVC C2712).
+__declspec(noinline) static int QuickPreviewProviderProbe(HWND owner, const wchar_t* path) {
+    return pulse::extensions::native::PreviewsAdapter::Available(owner, path) ? 1 : 0;
+}
+
 int ShotModeMain(AppState& state, HWND hwnd) {
     bool ok = false;
     __try {
@@ -4372,7 +4380,7 @@ int ShotModeMain(AppState& state, HWND hwnd) {
                 }
                 n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
                     "provider_available=%d\n",
-                    pulse::extensions::native::PreviewsAdapter::Available(state.hwnd, probe) ? 1 : 0);
+                    QuickPreviewProviderProbe(state.hwnd, probe));
                 for (size_t package = 0; package < packages && n < static_cast<int>(sizeof(buf)) - 96; ++package)
                     n += snprintf(buf + n, sizeof(buf) - static_cast<size_t>(n),
                         "pkg%zu_enabled=%d status=0x%lX\n", package,
